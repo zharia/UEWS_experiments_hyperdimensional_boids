@@ -14,6 +14,7 @@ import { MicroFaunaSimulation } from '../simulation/microFauna';
 import { MicroFaunaRenderer } from './microFaunaRender';
 import { aquariumAudio } from '../audio/aquariumAudio';
 import { benchmarkEngine } from '../utils/performanceBenchmark';
+import { ScreenSpaceDisplacementPass } from './screenSpaceDisplacement';
 
 interface CircadianKeyframe {
   phase: number;
@@ -119,7 +120,7 @@ export class AquariumSceneManager {
   private targetCameraOffset: THREE.Vector2 = new THREE.Vector2(0, 0);
 
   // Scene elements
-  private coralObjects!: CoralSceneObjects;
+  public coralObjects!: CoralSceneObjects;
   private fishMesh!: THREE.InstancedMesh;
   private fireflySystem!: FireflyMeshSystem;
   private fishMaterial!: THREE.ShaderMaterial;
@@ -147,6 +148,13 @@ export class AquariumSceneManager {
   public currentFps: number = 60;
   private frameCount: number = 0;
   private lastFpsTime: number = performance.now();
+
+  // Screen Space Displacement (SSD) Post-Processing Pipeline
+  public ssdPass!: ScreenSpaceDisplacementPass;
+  private tmpSchoolVec: THREE.Vector3 = new THREE.Vector3();
+  private schoolScreenUv: THREE.Vector2 = new THREE.Vector2(0.5, 0.5);
+  private tmpBubbleVec: THREE.Vector3 = new THREE.Vector3();
+  private bubbleScreenUv: THREE.Vector2 = new THREE.Vector2(0.3, 0.2);
 
   // Temporary vectors for matrix computation (reused to eliminate per-frame GC allocations)
   private dummyObj: THREE.Object3D = new THREE.Object3D();
@@ -205,7 +213,8 @@ export class AquariumSceneManager {
       alpha: false,
     });
     this.renderer.setSize(width, height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
+    const pixelRatio = Math.min(window.devicePixelRatio, 1.25);
+    this.renderer.setPixelRatio(pixelRatio);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.shadowMap.autoUpdate = false;
@@ -213,6 +222,9 @@ export class AquariumSceneManager {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.15;
     container.appendChild(this.renderer.domElement);
+
+    // Initialize Screen Space Displacement Pass
+    this.ssdPass = new ScreenSpaceDisplacementPass(width, height, pixelRatio);
 
     // 3. Build scene components
     this.initDeskAndEnvironment();
@@ -816,6 +828,12 @@ export class AquariumSceneManager {
       }
     }
 
+    // 5b. Update Botanical Plant Lifecycle (Organic Growth, Maturation, Senescence Wilting, Chlorosis, Detritus, Spores & Rebirth)
+    if (this.coralObjects && this.coralObjects.plantLifecycleSim) {
+      this.coralObjects.plantLifecycleSim.update(dt, this.boidSim.timeSpeed);
+      benchmarkEngine.markStage('plantLifecycle');
+    }
+
     // 6. Animate sea anemone waving tentacles
     if (this.coralObjects && this.coralObjects.anemoneMesh) {
       const mesh = this.coralObjects.anemoneMesh;
@@ -867,9 +885,44 @@ export class AquariumSceneManager {
     this.microFaunaRenderer.update(dt);
     benchmarkEngine.markStage('microFaunaRender');
 
-    // 10. Render Scene
-    this.renderer.render(this.scene, this.camera);
-    benchmarkEngine.markStage('webglRender');
+    // 10. Render Scene & Screen Space Displacement (SSD) Post-Processing Pipeline
+    if (this.ssdPass && this.ssdPass.config.enabled) {
+      this.renderer.setRenderTarget(this.ssdPass.renderTarget);
+      this.renderer.clear();
+      this.renderer.render(this.scene, this.camera);
+      benchmarkEngine.markStage('webglRender');
+
+      // Compute screen space projection coordinates for school center and airstone bubble generator
+      const sc = this.boidSim.schoolCenter;
+      this.tmpSchoolVec.set(sc.x, sc.y, sc.z);
+      this.tmpSchoolVec.project(this.camera);
+      this.schoolScreenUv.set(
+        (this.tmpSchoolVec.x + 1.0) * 0.5,
+        (this.tmpSchoolVec.y + 1.0) * 0.5
+      );
+
+      this.tmpBubbleVec.set(-8.0, -6.5, -2.5);
+      this.tmpBubbleVec.project(this.camera);
+      this.bubbleScreenUv.set(
+        (this.tmpBubbleVec.x + 1.0) * 0.5,
+        (this.tmpBubbleVec.y + 1.0) * 0.5
+      );
+
+      this.ssdPass.update(
+        elapsedTime,
+        this.schoolScreenUv,
+        this.boidSim.schoolActivity,
+        this.bubbleScreenUv
+      );
+
+      this.renderer.setRenderTarget(null);
+      this.ssdPass.render(this.renderer);
+      benchmarkEngine.markStage('screenSpaceDisplacement');
+    } else {
+      this.renderer.setRenderTarget(null);
+      this.renderer.render(this.scene, this.camera);
+      benchmarkEngine.markStage('webglRender');
+    }
 
     benchmarkEngine.endFrame(this.renderer.info.render.calls, this.renderer.info.render.triangles);
 
@@ -1013,6 +1066,11 @@ export class AquariumSceneManager {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height);
+    const pixelRatio = Math.min(window.devicePixelRatio, 1.25);
+    this.renderer.setPixelRatio(pixelRatio);
+    if (this.ssdPass) {
+      this.ssdPass.setSize(width, height, pixelRatio);
+    }
   };
 
   public destroy() {
@@ -1021,6 +1079,9 @@ export class AquariumSceneManager {
     window.removeEventListener('resize', this.onResize);
     window.removeEventListener('pointermove', this.onPointerMove);
     this.microFaunaRenderer.destroy();
+    if (this.ssdPass) {
+      this.ssdPass.dispose();
+    }
     this.foodGeo.dispose();
     this.foodMat.dispose();
     this.renderer.dispose();

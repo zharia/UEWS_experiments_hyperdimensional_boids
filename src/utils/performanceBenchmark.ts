@@ -9,9 +9,11 @@ export type BenchmarkStage =
   | 'instancedFish'
   | 'instancedFireflies'
   | 'ambientObjects'
+  | 'plantLifecycle'
   | 'microFaunaSim'
   | 'microFaunaRender'
-  | 'webglRender';
+  | 'webglRender'
+  | 'screenSpaceDisplacement';
 
 export interface HitchRecord {
   id: number;
@@ -70,9 +72,11 @@ export class PerformanceBenchmarkEngine {
     instancedFish: 0,
     instancedFireflies: 0,
     ambientObjects: 0,
+    plantLifecycle: 0,
     microFaunaSim: 0,
     microFaunaRender: 0,
     webglRender: 0,
+    screenSpaceDisplacement: 0,
   };
 
   // Stage historical accumulators for rolling average
@@ -82,9 +86,11 @@ export class PerformanceBenchmarkEngine {
     instancedFish: 0,
     instancedFireflies: 0,
     ambientObjects: 0,
+    plantLifecycle: 0,
     microFaunaSim: 0,
     microFaunaRender: 0,
     webglRender: 0,
+    screenSpaceDisplacement: 0,
   };
   private stageSampleCount: number = 0;
 
@@ -199,9 +205,11 @@ export class PerformanceBenchmarkEngine {
       instancedFish: this.currentStages.instancedFish,
       instancedFireflies: this.currentStages.instancedFireflies,
       ambientObjects: this.currentStages.ambientObjects,
+      plantLifecycle: this.currentStages.plantLifecycle,
       microFaunaSim: this.currentStages.microFaunaSim,
       microFaunaRender: this.currentStages.microFaunaRender,
       webglRender: this.currentStages.webglRender,
+      screenSpaceDisplacement: this.currentStages.screenSpaceDisplacement,
     };
 
     for (const [key, val] of Object.entries(stagesCopy)) {
@@ -226,9 +234,11 @@ export class PerformanceBenchmarkEngine {
         instancedFish: 'Fish Instanced Matrix Update',
         instancedFireflies: 'Firefly Instanced Buffers',
         ambientObjects: 'Ambient Uniforms & Bubbles',
+        plantLifecycle: 'Botanical Lifecycle & Splats',
         microFaunaSim: 'Micro-Fauna State Simulation',
         microFaunaRender: 'Soft-Body Verlet / Mesh Deformation',
         webglRender: 'Three.js WebGL Render Call',
+        screenSpaceDisplacement: 'Screen Space Displacement & Optics',
       };
       culpritName = stageLabels[maxStage] || maxStage;
       culpritMs = maxStageMs;
@@ -331,9 +341,11 @@ export class PerformanceBenchmarkEngine {
       instancedFish: Math.round((this.stageAccumulators.instancedFish / sampleDiv) * 100) / 100,
       instancedFireflies: Math.round((this.stageAccumulators.instancedFireflies / sampleDiv) * 100) / 100,
       ambientObjects: Math.round((this.stageAccumulators.ambientObjects / sampleDiv) * 100) / 100,
+      plantLifecycle: Math.round((this.stageAccumulators.plantLifecycle / sampleDiv) * 100) / 100,
       microFaunaSim: Math.round((this.stageAccumulators.microFaunaSim / sampleDiv) * 100) / 100,
       microFaunaRender: Math.round((this.stageAccumulators.microFaunaRender / sampleDiv) * 100) / 100,
       webglRender: Math.round((this.stageAccumulators.webglRender / sampleDiv) * 100) / 100,
+      screenSpaceDisplacement: Math.round((this.stageAccumulators.screenSpaceDisplacement / sampleDiv) * 100) / 100,
     };
 
     // Instant & Smooth FPS

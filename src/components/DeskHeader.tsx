@@ -13,10 +13,12 @@ import {
   Fish,
   Moon,
   Sparkles,
+  Sprout,
   Sun,
   Sunset,
   Volume2,
   VolumeX,
+  Waves,
 } from 'lucide-react';
 import { SimulationStats } from '../types';
 import { aquariumAudio } from '../audio/aquariumAudio';
@@ -24,9 +26,10 @@ import { aquariumAudio } from '../audio/aquariumAudio';
 interface DeskHeaderProps {
   stats: SimulationStats;
   onOpenBenchmark?: () => void;
+  onOpenBotanical?: () => void;
 }
 
-export const DeskHeader: React.FC<DeskHeaderProps> = ({ stats, onOpenBenchmark }) => {
+export const DeskHeader: React.FC<DeskHeaderProps> = ({ stats, onOpenBenchmark, onOpenBotanical }) => {
   const [isMuted, setIsMuted] = useState(aquariumAudio.getIsMuted());
 
   const handleToggleSound = () => {
@@ -187,10 +190,32 @@ export const DeskHeader: React.FC<DeskHeaderProps> = ({ stats, onOpenBenchmark }
           </div>
         )}
 
+        {/* Botanical Plant Morphology & Lifecycle Modal Trigger */}
+        {onOpenBotanical && (
+          <button
+            id="btn-header-botanical"
+            onClick={onOpenBotanical}
+            title="Inspect Botanical Morphology, Splats, and Lifecycle Growth/Senescence Simulation"
+            className="flex items-center gap-1.5 bg-emerald-950/80 hover:bg-emerald-900/90 backdrop-blur-md px-2.5 py-1.5 rounded-lg border border-emerald-700/60 text-xs font-mono text-emerald-300 transition-all cursor-pointer shadow-sm group"
+          >
+            <Sprout className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
+            <span>Botanical Flora</span>
+          </button>
+        )}
+
         {/* GPU Acceleration Tag */}
         <div className="hidden sm:flex items-center gap-1 bg-slate-900/80 backdrop-blur-md px-2.5 py-1.5 rounded-lg border border-slate-800 text-[11px] font-mono text-slate-400">
           <Cpu className="w-3 h-3 text-cyan-400" />
           <span>GPU Shaders</span>
+        </div>
+
+        {/* Screen Space Displacement (SSD) Refraction Badge */}
+        <div
+          className="hidden md:flex items-center gap-1 bg-slate-900/80 backdrop-blur-md px-2.5 py-1.5 rounded-lg border border-teal-800/60 text-[11px] font-mono text-teal-300"
+          title="Screen Space Displacement: Real-time fluid refraction, boid school wakes, and chromatic dispersion optics active"
+        >
+          <Waves className="w-3 h-3 text-teal-400" />
+          <span>SSD Refraction</span>
         </div>
 
         {/* Sound Toggle */}

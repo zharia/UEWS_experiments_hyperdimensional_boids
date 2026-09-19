@@ -51,10 +51,20 @@ const STAGE_LABELS: Record<BenchmarkStage, { label: string; color: string; desc:
     color: 'bg-indigo-500',
     desc: 'Anemone kinematics, rising bubbles & caustics time uniforms',
   },
+  plantLifecycle: {
+    label: 'Botanical Lifecycle & Splats',
+    color: 'bg-emerald-600',
+    desc: 'Morphology growth/wilting, detritus shedding, and spore drift',
+  },
   webglRender: {
     label: 'Three.js WebGL Render',
     color: 'bg-violet-500',
     desc: 'GPU draw calls, depth sorting & fragment shading',
+  },
+  screenSpaceDisplacement: {
+    label: 'Screen Space Displacement',
+    color: 'bg-teal-400',
+    desc: 'Hydrodynamic wave refraction, wake shockwaves & chromatic dispersion',
   },
 };
 

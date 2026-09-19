@@ -6,11 +6,14 @@
 import * as THREE from 'three';
 import { createSandMesh } from './sandTexture';
 import {
-  createGoldenBranchingCoralGeometry,
-  createGoldenSpiralGrassGeometry,
-  createGoldenWhorledPlantGeometry,
-} from './goldenPlants';
+  createAcroporaTreeGeometry,
+  createGiantKelpGeometry,
+  createCabombaMilfoilGeometry,
+  createAmazonSwordGeometry,
+} from './plantMorphology';
+import { createPlantSplatMesh } from './plantSplats';
 import { createPlantShaderMaterial } from './plantShaders';
+import { PlantLifecycleSimulation } from '../simulation/plantLifecycle';
 
 export interface CoralSceneObjects {
   coralGroup: THREE.Group;
@@ -20,15 +23,17 @@ export interface CoralSceneObjects {
   bubblePositions: Float32Array;
   bubbleVelocities: Float32Array;
   plantMaterials: THREE.ShaderMaterial[];
+  plantLifecycleSim: PlantLifecycleSimulation;
 }
 
 /**
- * Creates the coral reef ecosystem, procedural sand bed, golden-ratio plants, and airstone.
+ * Creates the coral reef ecosystem, procedural sand bed, upgraded botanical flora, and airstone.
  */
 export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
   const coralGroup = new THREE.Group();
   coralGroup.name = 'coralReef';
   const plantMaterials: THREE.ShaderMaterial[] = [];
+  const plantLifecycleSim = new PlantLifecycleSimulation();
 
   // 1. Procedural Sand bed / Sea floor with multi-frequency noise
   const sandMesh = createSandMesh();
@@ -100,49 +105,137 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
   brainCoral2.receiveShadow = true;
   coralGroup.add(brainCoral2);
 
-  // 4. Golden-Ratio Branching Coral Trees (Phyllotaxis with height-varying multi-frequency texture)
-  // Tree 1: Violet / Amethyst -> Electric Magenta tips
-  const coralTreeMat1 = createPlantShaderMaterial({
-    baseColor: new THREE.Color(0x281238), // dark plum root
-    midColor: new THREE.Color(0x8a3ab9),  // rich royal purple
-    tipColor: new THREE.Color(0xff49db),  // glowing neon magenta tips
+  // =========================================================================
+  // 4. UPGRADED BOTANICAL FLORA (smin Collars, Splats & Biological Lifecycle)
+  // =========================================================================
+
+  // --- PLANT 1: Acropora Millepora Tree 1 (Amethyst / Royal Violet -> Neon Magenta) ---
+  const treeMat1 = createPlantShaderMaterial({
+    baseColor: new THREE.Color(0x281238),
+    midColor: new THREE.Color(0x8a3ab9),
+    tipColor: new THREE.Color(0xff49db),
+    senescentColor: new THREE.Color(0x8a5528),
     minY: -6.8,
     maxY: -1.2,
     noiseScale: 1.35,
     swayStrength: 0.22,
   });
-  plantMaterials.push(coralTreeMat1);
+  plantMaterials.push(treeMat1);
 
-  const treeGeo1 = createGoldenBranchingCoralGeometry(new THREE.Vector3(-9.2, -6.6, -1.8), 3.4, 0.42, 4);
-  const coralTree1 = new THREE.Mesh(treeGeo1, coralTreeMat1);
-  coralTree1.castShadow = true;
-  coralTree1.receiveShadow = true;
-  coralGroup.add(coralTree1);
+  const treePos1 = new THREE.Vector3(-9.2, -6.6, -1.8);
+  const treeData1 = createAcroporaTreeGeometry(treePos1, 3.4, 0.42, 4);
+  const treeMesh1 = new THREE.Mesh(treeData1.stemGeometry, treeMat1);
+  treeMesh1.castShadow = true;
+  treeMesh1.receiveShadow = true;
 
-  // Tree 2: Terracotta Ochre -> Golden Amber -> Translucent Peach tips
-  const coralTreeMat2 = createPlantShaderMaterial({
-    baseColor: new THREE.Color(0x3d1c08), // earthy umber root
-    midColor: new THREE.Color(0xe66025),  // warm coral amber
-    tipColor: new THREE.Color(0xffbe53),  // translucent golden-peach tips
+  // Polyp splats for Tree 1
+  const treeSplats1 = createPlantSplatMesh({
+    splats: treeData1.splats,
+    baseColor: new THREE.Color(0x8a3ab9),
+    midColor: new THREE.Color(0xba45d4),
+    tipColor: new THREE.Color(0xff6ef0),
+    senescentColor: new THREE.Color(0x8a5528),
+    subsurfaceColor: new THREE.Color(0xff88f5),
+  });
+  plantMaterials.push(treeSplats1.material);
+
+  const treeGroup1 = new THREE.Group();
+  treeGroup1.add(treeMesh1);
+  treeGroup1.add(treeSplats1.mesh);
+  coralGroup.add(treeGroup1);
+
+  plantLifecycleSim.registerPlant({
+    id: 'acropora_amethyst',
+    commonName: 'Amethyst Staghorn Coral',
+    scientificName: 'Acropora millepora',
+    morphology: 'acropora_tree',
+    origin: treePos1,
+    baseScale: new THREE.Vector3(1, 1, 1),
+    stage: 'flourishing',
+    stageProgress: 0.5,
+    overallProgress: 0.55,
+    age: 65,
+    lifespan: 140,
+    speedMultiplier: 1.0,
+    growthScale: 1.0,
+    wiltAmount: 0.0,
+    chlorosis: 0.0,
+    health: 100,
+    sporeEmit: 0.5,
+    shedLeavesCount: 0,
+    group: treeGroup1,
+    stemMesh: treeMesh1,
+    stemMaterial: treeMat1,
+    splatMesh: treeSplats1.mesh,
+    splatMaterial: treeSplats1.material,
+  });
+
+  // --- PLANT 2: Acropora Coral Tree 2 (Terracotta Umber -> Coral Amber -> Translucent Peach) ---
+  const treeMat2 = createPlantShaderMaterial({
+    baseColor: new THREE.Color(0x3d1c08),
+    midColor: new THREE.Color(0xe66025),
+    tipColor: new THREE.Color(0xffbe53),
+    senescentColor: new THREE.Color(0x73401c),
     minY: -6.8,
     maxY: -1.0,
     noiseScale: 1.4,
     swayStrength: 0.24,
   });
-  plantMaterials.push(coralTreeMat2);
+  plantMaterials.push(treeMat2);
 
-  const treeGeo2 = createGoldenBranchingCoralGeometry(new THREE.Vector3(8.5, -6.6, -1.0), 3.6, 0.44, 4);
-  const coralTree2 = new THREE.Mesh(treeGeo2, coralTreeMat2);
-  coralTree2.castShadow = true;
-  coralTree2.receiveShadow = true;
-  coralGroup.add(coralTree2);
+  const treePos2 = new THREE.Vector3(8.5, -6.6, -1.0);
+  const treeData2 = createAcroporaTreeGeometry(treePos2, 3.6, 0.44, 4);
+  const treeMesh2 = new THREE.Mesh(treeData2.stemGeometry, treeMat2);
+  treeMesh2.castShadow = true;
+  treeMesh2.receiveShadow = true;
 
-  // 5. Golden Spiral Ribbon Kelp / Vallisneria (Golden logarithmic spiral sea grass)
-  // Grass Cluster 1: Deep Forest Green -> Emerald -> Chartreuse tips
+  const treeSplats2 = createPlantSplatMesh({
+    splats: treeData2.splats,
+    baseColor: new THREE.Color(0xd95a20),
+    midColor: new THREE.Color(0xf59e0b),
+    tipColor: new THREE.Color(0xfde047),
+    senescentColor: new THREE.Color(0x73401c),
+    subsurfaceColor: new THREE.Color(0xfef08a),
+  });
+  plantMaterials.push(treeSplats2.material);
+
+  const treeGroup2 = new THREE.Group();
+  treeGroup2.add(treeMesh2);
+  treeGroup2.add(treeSplats2.mesh);
+  coralGroup.add(treeGroup2);
+
+  plantLifecycleSim.registerPlant({
+    id: 'acropora_amber',
+    commonName: 'Sunfire Coral Bush',
+    scientificName: 'Dendronephthya aurea',
+    morphology: 'acropora_tree',
+    origin: treePos2,
+    baseScale: new THREE.Vector3(1, 1, 1),
+    stage: 'growing',
+    stageProgress: 0.6,
+    overallProgress: 0.32,
+    age: 42,
+    lifespan: 130,
+    speedMultiplier: 1.05,
+    growthScale: 0.88,
+    wiltAmount: 0.0,
+    chlorosis: 0.0,
+    health: 95,
+    sporeEmit: 0.0,
+    shedLeavesCount: 0,
+    group: treeGroup2,
+    stemMesh: treeMesh2,
+    stemMaterial: treeMat2,
+    splatMesh: treeSplats2.mesh,
+    splatMaterial: treeSplats2.material,
+  });
+
+  // --- PLANT 3: Macrocystis Giant Kelp 1 (Deep Peat -> Emerald Chlorophyll -> Chartreuse Blades) ---
   const kelpMat1 = createPlantShaderMaterial({
-    baseColor: new THREE.Color(0x0f2b18), // dark peat green
-    midColor: new THREE.Color(0x16a34a),  // vibrant chlorophyll emerald
-    tipColor: new THREE.Color(0xa3e635),  // golden chartreuse tips
+    baseColor: new THREE.Color(0x0f2b18),
+    midColor: new THREE.Color(0x16a34a),
+    tipColor: new THREE.Color(0xa3e635),
+    senescentColor: new THREE.Color(0xb58025),
     minY: -6.8,
     maxY: 1.5,
     noiseScale: 1.1,
@@ -150,16 +243,58 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
   });
   plantMaterials.push(kelpMat1);
 
-  const kelpGeo1 = createGoldenSpiralGrassGeometry(new THREE.Vector3(-2.8, -6.8, -3.2), 26, 7.8);
-  const kelpMesh1 = new THREE.Mesh(kelpGeo1, kelpMat1);
+  const kelpPos1 = new THREE.Vector3(-2.8, -6.8, -3.2);
+  const kelpData1 = createGiantKelpGeometry(kelpPos1, 24, 7.8);
+  const kelpMesh1 = new THREE.Mesh(kelpData1.stemGeometry, kelpMat1);
   kelpMesh1.receiveShadow = true;
-  coralGroup.add(kelpMesh1);
 
-  // Grass Cluster 2: Marine Teal -> Aquamarine -> Cyan seafoam tips
+  const kelpSplats1 = createPlantSplatMesh({
+    splats: kelpData1.splats,
+    baseColor: new THREE.Color(0x15803d),
+    midColor: new THREE.Color(0x22c55e),
+    tipColor: new THREE.Color(0xbbf7d0),
+    senescentColor: new THREE.Color(0xb58025),
+    subsurfaceColor: new THREE.Color(0xa3e635),
+  });
+  plantMaterials.push(kelpSplats1.material);
+
+  const kelpGroup1 = new THREE.Group();
+  kelpGroup1.add(kelpMesh1);
+  kelpGroup1.add(kelpSplats1.mesh);
+  coralGroup.add(kelpGroup1);
+
+  plantLifecycleSim.registerPlant({
+    id: 'giant_kelp_emerald',
+    commonName: 'Giant Ribbon Kelp',
+    scientificName: 'Macrocystis pyrifera',
+    morphology: 'giant_kelp',
+    origin: kelpPos1,
+    baseScale: new THREE.Vector3(1, 1, 1),
+    stage: 'flourishing',
+    stageProgress: 0.35,
+    overallProgress: 0.52,
+    age: 82,
+    lifespan: 160,
+    speedMultiplier: 0.95,
+    growthScale: 1.0,
+    wiltAmount: 0.0,
+    chlorosis: 0.0,
+    health: 100,
+    sporeEmit: 0.6,
+    shedLeavesCount: 0,
+    group: kelpGroup1,
+    stemMesh: kelpMesh1,
+    stemMaterial: kelpMat1,
+    splatMesh: kelpSplats1.mesh,
+    splatMaterial: kelpSplats1.material,
+  });
+
+  // --- PLANT 4: Macrocystis Kelp 2 (Abyssal Teal -> Seafoam Aquamarine -> Radiant Cyan) ---
   const kelpMat2 = createPlantShaderMaterial({
-    baseColor: new THREE.Color(0x082630), // deep abyssal navy
-    midColor: new THREE.Color(0x0d9488),  // seafoam aquamarine
-    tipColor: new THREE.Color(0x38bdf8),  // translucent radiant cyan
+    baseColor: new THREE.Color(0x082630),
+    midColor: new THREE.Color(0x0d9488),
+    tipColor: new THREE.Color(0x38bdf8),
+    senescentColor: new THREE.Color(0x78602b),
     minY: -6.8,
     maxY: 1.2,
     noiseScale: 1.15,
@@ -167,45 +302,173 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
   });
   plantMaterials.push(kelpMat2);
 
-  const kelpGeo2 = createGoldenSpiralGrassGeometry(new THREE.Vector3(3.4, -6.8, -2.6), 22, 7.2);
-  const kelpMesh2 = new THREE.Mesh(kelpGeo2, kelpMat2);
+  const kelpPos2 = new THREE.Vector3(3.4, -6.8, -2.6);
+  const kelpData2 = createGiantKelpGeometry(kelpPos2, 20, 7.2);
+  const kelpMesh2 = new THREE.Mesh(kelpData2.stemGeometry, kelpMat2);
   kelpMesh2.receiveShadow = true;
-  coralGroup.add(kelpMesh2);
 
-  // 6. Golden Phyllotaxis Whorled Plants (Cabomba / Rotala with height-varying leaf whorls)
-  // Plant 1: Olive bronze -> Jade -> Ruby apical buds
-  const whorledMat1 = createPlantShaderMaterial({
+  const kelpSplats2 = createPlantSplatMesh({
+    splats: kelpData2.splats,
+    baseColor: new THREE.Color(0x0e7490),
+    midColor: new THREE.Color(0x06b6d4),
+    tipColor: new THREE.Color(0xa5f3fc),
+    senescentColor: new THREE.Color(0x78602b),
+    subsurfaceColor: new THREE.Color(0x67e8f9),
+  });
+  plantMaterials.push(kelpSplats2.material);
+
+  const kelpGroup2 = new THREE.Group();
+  kelpGroup2.add(kelpMesh2);
+  kelpGroup2.add(kelpSplats2.mesh);
+  coralGroup.add(kelpGroup2);
+
+  plantLifecycleSim.registerPlant({
+    id: 'giant_kelp_cyan',
+    commonName: 'Seafoam Ribbon Kelp',
+    scientificName: 'Laminaria saccharina',
+    morphology: 'giant_kelp',
+    origin: kelpPos2,
+    baseScale: new THREE.Vector3(1, 1, 1),
+    stage: 'senescent',
+    stageProgress: 0.25,
+    overallProgress: 0.77,
+    age: 115,
+    lifespan: 150,
+    speedMultiplier: 1.0,
+    growthScale: 0.96,
+    wiltAmount: 0.22,
+    chlorosis: 0.35,
+    health: 68,
+    sporeEmit: 0.0,
+    shedLeavesCount: 3,
+    group: kelpGroup2,
+    stemMesh: kelpMesh2,
+    stemMaterial: kelpMat2,
+    splatMesh: kelpSplats2.mesh,
+    splatMaterial: kelpSplats2.material,
+  });
+
+  // --- PLANT 5: Cabomba Caroliniana (Fine-Feather Milfoil with Nodal Sheaths & Ruby Apical Buds) ---
+  const milfoilMat = createPlantShaderMaterial({
     baseColor: new THREE.Color(0x1f2113),
     midColor: new THREE.Color(0x2e8b57),
     tipColor: new THREE.Color(0xf43f5e), // ruby apical tips
+    senescentColor: new THREE.Color(0x996d28),
     minY: -6.8,
     maxY: 0.2,
     noiseScale: 1.6,
     swayStrength: 0.36,
   });
-  plantMaterials.push(whorledMat1);
+  plantMaterials.push(milfoilMat);
 
-  const whorledGeo1 = createGoldenWhorledPlantGeometry(new THREE.Vector3(0.5, -6.8, -1.6), 6.5, 9);
-  const whorledMesh1 = new THREE.Mesh(whorledGeo1, whorledMat1);
-  whorledMesh1.receiveShadow = true;
-  coralGroup.add(whorledMesh1);
+  const milfoilPos = new THREE.Vector3(0.5, -6.8, -1.6);
+  const milfoilData = createCabombaMilfoilGeometry(milfoilPos, 6.5, 9);
+  const milfoilMesh = new THREE.Mesh(milfoilData.stemGeometry, milfoilMat);
+  milfoilMesh.receiveShadow = true;
 
-  // Plant 2: Dusky umber -> Lime jade -> Golden amber tips
-  const whorledMat2 = createPlantShaderMaterial({
-    baseColor: new THREE.Color(0x1a2118),
-    midColor: new THREE.Color(0x4ade80),
-    tipColor: new THREE.Color(0xfacc15), // golden amber tips
-    minY: -6.4,
-    maxY: -1.0,
-    noiseScale: 1.5,
-    swayStrength: 0.32,
+  const milfoilSplats = createPlantSplatMesh({
+    splats: milfoilData.splats,
+    baseColor: new THREE.Color(0x166534),
+    midColor: new THREE.Color(0x22c55e),
+    tipColor: new THREE.Color(0xfb7185), // rose apical feather tips
+    senescentColor: new THREE.Color(0x996d28),
+    subsurfaceColor: new THREE.Color(0x86efac),
   });
-  plantMaterials.push(whorledMat2);
+  plantMaterials.push(milfoilSplats.material);
 
-  const whorledGeo2 = createGoldenWhorledPlantGeometry(new THREE.Vector3(-5.2, -6.2, 0.4), 5.0, 7);
-  const whorledMesh2 = new THREE.Mesh(whorledGeo2, whorledMat2);
-  whorledMesh2.receiveShadow = true;
-  coralGroup.add(whorledMesh2);
+  const milfoilGroup = new THREE.Group();
+  milfoilGroup.add(milfoilMesh);
+  milfoilGroup.add(milfoilSplats.mesh);
+  coralGroup.add(milfoilGroup);
+
+  plantLifecycleSim.registerPlant({
+    id: 'cabomba_ruby',
+    commonName: 'Green & Pink Fanwort',
+    scientificName: 'Cabomba caroliniana',
+    morphology: 'cabomba_milfoil',
+    origin: milfoilPos,
+    baseScale: new THREE.Vector3(1, 1, 1),
+    stage: 'growing',
+    stageProgress: 0.85,
+    overallProgress: 0.40,
+    age: 48,
+    lifespan: 120,
+    speedMultiplier: 1.1,
+    growthScale: 0.95,
+    wiltAmount: 0.0,
+    chlorosis: 0.0,
+    health: 98,
+    sporeEmit: 0.0,
+    shedLeavesCount: 0,
+    group: milfoilGroup,
+    stemMesh: milfoilMesh,
+    stemMaterial: milfoilMat,
+    splatMesh: milfoilSplats.mesh,
+    splatMaterial: milfoilSplats.material,
+  });
+
+  // --- PLANT 6: Echinodorus Amazon Sword (Broad Lanceolate Rosette with Midrib & Secondary Veins) ---
+  const swordMat = createPlantShaderMaterial({
+    baseColor: new THREE.Color(0x142e1b),
+    midColor: new THREE.Color(0x15803d),
+    tipColor: new THREE.Color(0x86efac), // luminous pale lime tips
+    senescentColor: new THREE.Color(0xa87422),
+    minY: -6.4,
+    maxY: -1.2,
+    noiseScale: 1.25,
+    swayStrength: 0.28,
+  });
+  plantMaterials.push(swordMat);
+
+  const swordPos = new THREE.Vector3(-5.2, -6.4, 0.4);
+  const swordData = createAmazonSwordGeometry(swordPos, 16, 5.2);
+  const swordMesh = new THREE.Mesh(swordData.stemGeometry, swordMat);
+  swordMesh.receiveShadow = true;
+
+  const swordSplats = createPlantSplatMesh({
+    splats: swordData.splats,
+    baseColor: new THREE.Color(0x166534),
+    midColor: new THREE.Color(0x22c55e),
+    tipColor: new THREE.Color(0x4ade80),
+    senescentColor: new THREE.Color(0xa87422),
+    subsurfaceColor: new THREE.Color(0x86efac),
+  });
+  plantMaterials.push(swordSplats.material);
+
+  const swordGroup = new THREE.Group();
+  swordGroup.add(swordMesh);
+  swordGroup.add(swordSplats.mesh);
+  coralGroup.add(swordGroup);
+
+  plantLifecycleSim.registerPlant({
+    id: 'amazon_sword_bleheri',
+    commonName: 'Amazon Sword Plant',
+    scientificName: 'Echinodorus bleheri',
+    morphology: 'amazon_sword',
+    origin: swordPos,
+    baseScale: new THREE.Vector3(1, 1, 1),
+    stage: 'sprout',
+    stageProgress: 0.6,
+    overallProgress: 0.09,
+    age: 12,
+    lifespan: 135,
+    speedMultiplier: 0.9,
+    growthScale: 0.32,
+    wiltAmount: 0.0,
+    chlorosis: 0.0,
+    health: 90,
+    sporeEmit: 0.0,
+    shedLeavesCount: 0,
+    group: swordGroup,
+    stemMesh: swordMesh,
+    stemMaterial: swordMat,
+    splatMesh: swordSplats.mesh,
+    splatMaterial: swordSplats.material,
+  });
+
+  // Add drifting plant detritus and luminous spore systems to scene
+  coralGroup.add(plantLifecycleSim.detritusMesh);
+  coralGroup.add(plantLifecycleSim.sporePoints);
 
   // 7. Tube Sponges with open osculum rims
   const spongeMat = new THREE.MeshStandardMaterial({
@@ -331,5 +594,7 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
     bubblePositions,
     bubbleVelocities,
     plantMaterials,
+    plantLifecycleSim,
   };
 }
+

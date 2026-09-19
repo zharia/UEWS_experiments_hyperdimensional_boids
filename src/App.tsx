@@ -12,6 +12,7 @@ import { TemporalTimeline } from './components/TemporalTimeline';
 import { AquariumControls } from './components/AquariumControls';
 import { FloraOverlay } from './components/FloraOverlay';
 import { BenchmarkPanel } from './components/BenchmarkPanel';
+import { BotanicalPanel } from './components/BotanicalPanel';
 import { InteractionTool, LightingPreset, SimulationStats } from './types';
 
 export default function App() {
@@ -31,6 +32,7 @@ export default function App() {
   const [timeSpeed, setTimeSpeed] = useState<number>(6.0);
   const [showEchoes, setShowEchoes] = useState<boolean>(true);
   const [showBenchmark, setShowBenchmark] = useState<boolean>(false);
+  const [showBotanical, setShowBotanical] = useState<boolean>(false);
 
   // Telemetry stats
   const [stats, setStats] = useState<SimulationStats>({
@@ -210,6 +212,7 @@ export default function App() {
       <DeskHeader
         stats={stats}
         onOpenBenchmark={() => setShowBenchmark(true)}
+        onOpenBotanical={() => setShowBotanical(true)}
       />
 
       {/* Interactive Controls & Settings */}
@@ -236,6 +239,13 @@ export default function App() {
         onTogglePlay={handleTogglePlay}
         onSetSpeed={handleSetSpeed}
         onToggleEchoes={handleToggleEchoes}
+      />
+
+      {/* Botanical Plant Morphology & Lifecycle Management HUD */}
+      <BotanicalPanel
+        isOpen={showBotanical}
+        onClose={() => setShowBotanical(false)}
+        lifecycleSim={sceneManager?.coralObjects?.plantLifecycleSim}
       />
 
       {/* Performance Benchmarking & Hitch Diagnostics HUD Modal */}

@@ -941,6 +941,207 @@ export const AquariumControls: React.FC<AquariumControlsProps> = ({
             </div>
           </div>
 
+          {/* Screen Space Displacement (SSD Optics) */}
+          <div className="pt-3 border-t border-slate-800 flex flex-col gap-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
+                <Waves className="w-3.5 h-3.5 text-teal-400" />
+                Screen Space Displacement
+              </span>
+              <button
+                id="btn-toggle-ssd"
+                onClick={() => {
+                  if (sceneManager?.ssdPass) {
+                    sceneManager.ssdPass.config.enabled = !sceneManager.ssdPass.config.enabled;
+                    forceUpdate();
+                  }
+                }}
+                className={`text-[10px] font-mono px-2 py-0.5 rounded border transition-colors ${
+                  sceneManager?.ssdPass?.config.enabled
+                    ? 'bg-teal-950/80 text-teal-300 border-teal-700/60'
+                    : 'bg-slate-800/60 text-slate-400 border-slate-700'
+                }`}
+              >
+                {sceneManager?.ssdPass?.config.enabled ? 'Enabled' : 'Disabled'}
+              </button>
+            </div>
+
+            {sceneManager?.ssdPass && (
+              <div className="bg-slate-800/40 p-2.5 rounded-xl border border-teal-900/30 flex flex-col gap-2.5">
+                {/* Displacement Strength Slider */}
+                <div>
+                  <div className="flex justify-between text-[11px] text-slate-300 mb-0.5 font-mono">
+                    <span>Displacement Strength</span>
+                    <span className="text-teal-400">
+                      {sceneManager.ssdPass.config.displacementStrength.toFixed(2)}x
+                    </span>
+                  </div>
+                  <input
+                    id="slider-ssd-strength"
+                    type="range"
+                    min={0.0}
+                    max={2.5}
+                    step={0.05}
+                    value={sceneManager.ssdPass.config.displacementStrength}
+                    onChange={(e) => {
+                      sceneManager.ssdPass.config.displacementStrength = parseFloat(e.target.value);
+                      forceUpdate();
+                    }}
+                    className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-teal-400"
+                  />
+                  <p className="text-[10px] text-slate-400 italic mt-0.5">
+                    Screen-space refractive distortion through water fluid and glass boundary meniscus.
+                  </p>
+                </div>
+
+                {/* Chromatic Aberration Slider */}
+                <div>
+                  <div className="flex justify-between text-[11px] text-slate-300 mb-0.5 font-mono">
+                    <span>Spectral Dispersion (CA)</span>
+                    <span className="text-cyan-400">
+                      {sceneManager.ssdPass.config.chromaticAberration.toFixed(2)}x
+                    </span>
+                  </div>
+                  <input
+                    id="slider-ssd-chromatic"
+                    type="range"
+                    min={0.0}
+                    max={2.0}
+                    step={0.05}
+                    value={sceneManager.ssdPass.config.chromaticAberration}
+                    onChange={(e) => {
+                      sceneManager.ssdPass.config.chromaticAberration = parseFloat(e.target.value);
+                      forceUpdate();
+                    }}
+                    className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                  />
+                  <p className="text-[10px] text-slate-400 italic mt-0.5">
+                    Wavelength-dependent light prism split at fluid deflection boundaries.
+                  </p>
+                </div>
+
+                {/* Wave Ripple Frequency & Speed */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="flex justify-between text-[10px] text-slate-300 mb-0.5 font-mono">
+                      <span>Ripple Freq</span>
+                      <span className="text-teal-300">
+                        {sceneManager.ssdPass.config.waveFrequency.toFixed(1)}
+                      </span>
+                    </div>
+                    <input
+                      id="slider-ssd-frequency"
+                      type="range"
+                      min={0.2}
+                      max={3.0}
+                      step={0.1}
+                      value={sceneManager.ssdPass.config.waveFrequency}
+                      onChange={(e) => {
+                        sceneManager.ssdPass.config.waveFrequency = parseFloat(e.target.value);
+                        forceUpdate();
+                      }}
+                      className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-teal-400"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-[10px] text-slate-300 mb-0.5 font-mono">
+                      <span>Wave Speed</span>
+                      <span className="text-teal-300">
+                        {sceneManager.ssdPass.config.waveSpeed.toFixed(1)}
+                      </span>
+                    </div>
+                    <input
+                      id="slider-ssd-speed"
+                      type="range"
+                      min={0.2}
+                      max={3.0}
+                      step={0.1}
+                      value={sceneManager.ssdPass.config.waveSpeed}
+                      onChange={(e) => {
+                        sceneManager.ssdPass.config.waveSpeed = parseFloat(e.target.value);
+                        forceUpdate();
+                      }}
+                      className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-teal-400"
+                    />
+                  </div>
+                </div>
+
+                {/* Toggles & Presets */}
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    id="btn-ssd-wake-toggle"
+                    onClick={() => {
+                      sceneManager.ssdPass.config.wakeInfluence = !sceneManager.ssdPass.config.wakeInfluence;
+                      forceUpdate();
+                    }}
+                    className={`flex-1 py-1.5 px-2 rounded-lg border text-[10px] font-mono transition-all ${
+                      sceneManager.ssdPass.config.wakeInfluence
+                        ? 'bg-cyan-950/80 text-cyan-300 border-cyan-700/60'
+                        : 'bg-slate-800/60 text-slate-400 border-slate-700'
+                    }`}
+                  >
+                    Fish Wakes: {sceneManager.ssdPass.config.wakeInfluence ? 'On' : 'Off'}
+                  </button>
+
+                  <button
+                    id="btn-ssd-debug-toggle"
+                    onClick={() => {
+                      sceneManager.ssdPass.config.debugMode = !sceneManager.ssdPass.config.debugMode;
+                      forceUpdate();
+                    }}
+                    className={`flex-1 py-1.5 px-2 rounded-lg border text-[10px] font-mono transition-all ${
+                      sceneManager.ssdPass.config.debugMode
+                        ? 'bg-amber-950/80 text-amber-300 border-amber-700/60'
+                        : 'bg-slate-800/60 text-slate-400 border-slate-700'
+                    }`}
+                  >
+                    Vector Field: {sceneManager.ssdPass.config.debugMode ? 'Visible' : 'Off'}
+                  </button>
+                </div>
+
+                {/* Quick Optics Presets */}
+                <div className="flex items-center gap-1.5 pt-0.5">
+                  <button
+                    onClick={() => {
+                      sceneManager.ssdPass.config.displacementStrength = 0.35;
+                      sceneManager.ssdPass.config.chromaticAberration = 0.25;
+                      sceneManager.ssdPass.config.waveFrequency = 0.7;
+                      sceneManager.ssdPass.config.waveSpeed = 0.6;
+                      forceUpdate();
+                    }}
+                    className="flex-1 py-1 rounded bg-slate-800/70 hover:bg-slate-800 border border-slate-700/70 text-[10px] text-slate-300 font-mono transition-colors"
+                  >
+                    Still
+                  </button>
+                  <button
+                    onClick={() => {
+                      sceneManager.ssdPass.config.displacementStrength = 0.85;
+                      sceneManager.ssdPass.config.chromaticAberration = 0.65;
+                      sceneManager.ssdPass.config.waveFrequency = 1.0;
+                      sceneManager.ssdPass.config.waveSpeed = 1.0;
+                      forceUpdate();
+                    }}
+                    className="flex-1 py-1 rounded bg-slate-800/70 hover:bg-slate-800 border border-slate-700/70 text-[10px] text-slate-300 font-mono transition-colors"
+                  >
+                    Natural
+                  </button>
+                  <button
+                    onClick={() => {
+                      sceneManager.ssdPass.config.displacementStrength = 1.55;
+                      sceneManager.ssdPass.config.chromaticAberration = 1.15;
+                      sceneManager.ssdPass.config.waveFrequency = 1.4;
+                      sceneManager.ssdPass.config.waveSpeed = 1.3;
+                      forceUpdate();
+                    }}
+                    className="flex-1 py-1 rounded bg-slate-800/70 hover:bg-slate-800 border border-slate-700/70 text-[10px] text-slate-300 font-mono transition-colors"
+                  >
+                    Currents
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* 4D Multi-Scalar Species Field Guide */}
           <div className="pt-3 border-t border-slate-800 flex flex-col gap-2">
             <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold">
