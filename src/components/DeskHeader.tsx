@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import {
   Activity,
   BarChart3,
+  Brain,
   Clock,
   Cpu,
   Eye,
@@ -25,11 +26,19 @@ import { aquariumAudio } from '../audio/aquariumAudio';
 
 interface DeskHeaderProps {
   stats: SimulationStats;
+  currentPhase?: string;
   onOpenBenchmark?: () => void;
   onOpenBotanical?: () => void;
+  onOpenEcology?: () => void;
 }
 
-export const DeskHeader: React.FC<DeskHeaderProps> = ({ stats, onOpenBenchmark, onOpenBotanical }) => {
+export const DeskHeader: React.FC<DeskHeaderProps> = ({
+  stats,
+  currentPhase = 'COLONISATION',
+  onOpenBenchmark,
+  onOpenBotanical,
+  onOpenEcology,
+}) => {
   const [isMuted, setIsMuted] = useState(aquariumAudio.getIsMuted());
 
   const handleToggleSound = () => {
@@ -188,6 +197,19 @@ export const DeskHeader: React.FC<DeskHeaderProps> = ({ stats, onOpenBenchmark, 
             <span className="w-2 h-2 rounded-full bg-lime-400 animate-ping inline-block" />
             <span>Sync: {Math.round(stats.kuramotoSync * 100)}%</span>
           </div>
+        )}
+
+        {/* Ecology Intelligence Inspector Modal Trigger */}
+        {onOpenEcology && (
+          <button
+            id="btn-header-ecology"
+            onClick={onOpenEcology}
+            title="Inspect Artificial Ecology, Drives, Memory, Antics, and Ecological Epochs"
+            className="flex items-center gap-1.5 bg-teal-950/80 hover:bg-teal-900/90 backdrop-blur-md px-2.5 py-1.5 rounded-lg border border-teal-700/60 text-xs font-mono text-teal-300 transition-all cursor-pointer shadow-sm group"
+          >
+            <Brain className="w-3.5 h-3.5 text-teal-400 group-hover:scale-110 transition-transform" />
+            <span>Ecology: {currentPhase}</span>
+          </button>
         )}
 
         {/* Botanical Plant Morphology & Lifecycle Modal Trigger */}

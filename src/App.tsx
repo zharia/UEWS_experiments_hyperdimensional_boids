@@ -13,6 +13,8 @@ import { AquariumControls } from './components/AquariumControls';
 import { FloraOverlay } from './components/FloraOverlay';
 import { BenchmarkPanel } from './components/BenchmarkPanel';
 import { BotanicalPanel } from './components/BotanicalPanel';
+import { EcosystemInspectorModal } from './components/EcosystemInspectorModal';
+import { EcologySimulation } from './simulation/EcologySimulation';
 import { InteractionTool, LightingPreset, SimulationStats } from './types';
 
 export default function App() {
@@ -21,6 +23,7 @@ export default function App() {
   // Core Simulation Singletons
   const [boidSim] = useState(() => new BoidSimulation4D(3, 190, 240));
   const [floraSim] = useState(() => new ProceduralFloraSimulation(1024, 512));
+  const [ecologySim] = useState(() => new EcologySimulation());
   const [sceneManager, setSceneManager] = useState<AquariumSceneManager | null>(null);
 
   // App UI State
@@ -33,6 +36,7 @@ export default function App() {
   const [showEchoes, setShowEchoes] = useState<boolean>(true);
   const [showBenchmark, setShowBenchmark] = useState<boolean>(false);
   const [showBotanical, setShowBotanical] = useState<boolean>(false);
+  const [showEcology, setShowEcology] = useState<boolean>(false);
 
   // Telemetry stats
   const [stats, setStats] = useState<SimulationStats>({
@@ -86,6 +90,9 @@ export default function App() {
       for (let i = 0; i < fireflies.length; i++) {
         if (fireflies[i].temporalAlpha > 0.15) visible++;
       }
+
+      // Update underlying artificial ecology simulation
+      ecologySim.update(0.3, floraSim.coverage, currentTool === 'clean_glass' ? 0.6 : 0.0);
 
       setCurrentTimeW(boidSim.currentTimeW);
 
@@ -189,6 +196,8 @@ export default function App() {
         handleSelectLighting('midnight');
       } else if (e.key === 'b' || e.key === 'B') {
         setShowBenchmark((prev) => !prev);
+      } else if (e.key === 'e' || e.key === 'E') {
+        setShowEcology((prev) => !prev);
       }
     };
 
@@ -211,8 +220,10 @@ export default function App() {
       {/* Top Header & Telemetry Badges */}
       <DeskHeader
         stats={stats}
+        currentPhase={ecologySim.phaseEngine.currentPhase}
         onOpenBenchmark={() => setShowBenchmark(true)}
         onOpenBotanical={() => setShowBotanical(true)}
+        onOpenEcology={() => setShowEcology(true)}
       />
 
       {/* Interactive Controls & Settings */}
@@ -252,6 +263,13 @@ export default function App() {
       <BenchmarkPanel
         isOpen={showBenchmark}
         onClose={() => setShowBenchmark(false)}
+      />
+
+      {/* Ecosystem Intelligence & Telemetry Inspector HUD */}
+      <EcosystemInspectorModal
+        isOpen={showEcology}
+        onClose={() => setShowEcology(false)}
+        ecologySim={ecologySim}
       />
 
       {/* Subtle bottom room ambient vignette */}
