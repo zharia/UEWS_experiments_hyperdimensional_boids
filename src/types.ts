@@ -50,6 +50,12 @@ export interface Boid4D {
   temporalAlpha: number; // Visibility fade based on |w - currentTime|
   bioluminescence: number; // 0-1 pulse
   mass: number; // Inertial mass for multi-scalar momentum dynamics
+
+  // Subtle Kinematic & Biological Behaviors
+  burstPhase?: number; // Burst-and-coast propulsion cycle (0-1)
+  isBursting?: boolean; // Currently flapping caudal fin vs low-drag coasting
+  curiosityTimer?: number; // Duration remaining investigating reef/substrate/cursor
+  curiosityTarget?: { x: number; y: number; z: number };
 }
 
 export interface FireflyBoid4D {
@@ -190,6 +196,12 @@ export interface MicroFaunaEntity {
   strokePhase?: number; // 0 to 1
   pulseIntensity?: number; // 1.0 normal, 1.8 escape
   escapePulsesRemaining?: number;
+
+  // Species-specific behavioral articulators
+  eyestalkFlick?: number; // Crab eyestalk blinking/retraction timer
+  radulaPhase?: number; // Snail mouth grazing & rasping cycle (0-1)
+  pleopodPhase?: number; // Shrimp swimmeret flutter cycle
+  abdomenFlex?: number; // Shrimp tail curl angle (0 = flat, >1 = curled/dart)
 }
 
 export interface MicroFaunaPopulationConfig {

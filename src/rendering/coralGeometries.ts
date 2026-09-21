@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import { createSandMesh } from './sandTexture';
+import { createProceduralRockTextures, createSculptedRockGeometry } from './rockTexture';
 import {
   createAcroporaTreeGeometry,
   createGiantKelpGeometry,
@@ -39,13 +40,18 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
   const sandMesh = createSandMesh();
   coralGroup.add(sandMesh);
 
-  // 2. Volcanic Reef Rocks (Base mounds for coral anchor)
-  const rockGeo = new THREE.DodecahedronGeometry(2.4, 2);
+  // 2. High-Fidelity Natural Reef Rocks (Sculpted organic stone with procedural strata & mineral veining)
+  const { rockTexture, rockBumpTexture } = createProceduralRockTextures();
+  const rockGeo = createSculptedRockGeometry(2.4, 2);
   const rockMat = new THREE.MeshStandardMaterial({
-    color: 0x3d3844,
-    roughness: 0.9,
-    metalness: 0.1,
-    flatShading: true,
+    color: 0xc8c2ba, // Crisp, natural, clearly visible stone grey/buff
+    map: rockTexture,
+    bumpMap: rockBumpTexture,
+    bumpScale: 0.14,
+    roughness: 0.68,
+    metalness: 0.05,
+    emissive: 0x2e2924, // Warm ambient baseline so rocks never collapse into pitch-black shadow
+    emissiveIntensity: 0.42,
   });
 
   const rockPositions = [

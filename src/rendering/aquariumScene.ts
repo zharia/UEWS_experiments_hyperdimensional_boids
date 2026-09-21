@@ -33,49 +33,49 @@ interface CircadianKeyframe {
 const CIRCADIAN_KEYFRAMES: CircadianKeyframe[] = [
   {
     phase: 0.05, // Dawn (06:00)
-    ambientColor: 0x1e273b,
-    ambientIntensity: 1.15,
-    topColor: 0xffddb5,
-    topIntensity: 1.95,
+    ambientColor: 0x2e3a52,
+    ambientIntensity: 1.5,
+    topColor: 0xffe0bc,
+    topIntensity: 2.25,
     clusterColor: 0x38bdf8,
     clusterIntensity: 1.8,
     rayWaterColor: 0x38bdf8,
-    rayIntensity: 0.95,
+    rayIntensity: 1.0,
     causticStrength: 0.75,
     backColor: 0x0c1926,
   },
   {
     phase: 0.25, // Midday Daylight (12:00)
-    ambientColor: 0x1a4660,
-    ambientIntensity: 1.45,
-    topColor: 0xbbf0ff,
-    topIntensity: 2.5,
+    ambientColor: 0x2a5c7e,
+    ambientIntensity: 1.85,
+    topColor: 0xd4f6ff,
+    topIntensity: 2.8,
     clusterColor: 0x00ffea,
     clusterIntensity: 2.0,
     rayWaterColor: 0x38bdf8,
-    rayIntensity: 1.1,
+    rayIntensity: 1.2,
     causticStrength: 0.88,
     backColor: 0x05131f,
   },
   {
     phase: 0.50, // Golden Sunset (18:00)
-    ambientColor: 0x3c202d,
-    ambientIntensity: 1.3,
-    topColor: 0xff9040,
-    topIntensity: 2.15,
+    ambientColor: 0x543644,
+    ambientIntensity: 1.6,
+    topColor: 0xffa454,
+    topIntensity: 2.35,
     clusterColor: 0xff77aa,
     clusterIntensity: 2.2,
     rayWaterColor: 0xf97316,
-    rayIntensity: 1.2,
+    rayIntensity: 1.25,
     causticStrength: 0.72,
     backColor: 0x1c0d16,
   },
   {
     phase: 0.72, // Bioluminescent Twilight (21:00)
-    ambientColor: 0x091728,
-    ambientIntensity: 0.75,
-    topColor: 0x205274,
-    topIntensity: 0.85,
+    ambientColor: 0x182e4a,
+    ambientIntensity: 1.3,
+    topColor: 0x356e94,
+    topIntensity: 1.35,
     clusterColor: 0x00ffcc,
     clusterIntensity: 4.2,
     rayWaterColor: 0x06b6d4,
@@ -85,10 +85,10 @@ const CIRCADIAN_KEYFRAMES: CircadianKeyframe[] = [
   },
   {
     phase: 0.88, // Abyssal Midnight (00:00)
-    ambientColor: 0x03070f,
-    ambientIntensity: 0.45,
-    topColor: 0x122436,
-    topIntensity: 0.35,
+    ambientColor: 0x142238,
+    ambientIntensity: 1.1,
+    topColor: 0x254668,
+    topIntensity: 0.95,
     clusterColor: 0xa855f7,
     clusterIntensity: 3.5,
     rayWaterColor: 0x818cf8,
@@ -134,6 +134,7 @@ export class AquariumSceneManager {
   private topAquariumLight!: THREE.DirectionalLight;
   private deskLampLight!: THREE.SpotLight;
   private boidClusterLight!: THREE.PointLight;
+  private substrateFillLight!: THREE.DirectionalLight;
   private volumetricGodRaysMesh!: THREE.Mesh;
   private godRaysMaterial!: THREE.ShaderMaterial;
   private causticsProjectorMat!: THREE.ShaderMaterial;
@@ -495,6 +496,13 @@ export class AquariumSceneManager {
     this.boidClusterLight = new THREE.PointLight(0x00ffea, 2.4, 18, 1.8);
     this.boidClusterLight.position.set(0, 0, 0);
     this.scene.add(this.boidClusterLight);
+
+    // 5. Reef Substrate & Rock Fill Light (Ensures rocks, corals, and substrate features are clearly visible)
+    this.substrateFillLight = new THREE.DirectionalLight(0x90d4ed, 1.35);
+    this.substrateFillLight.position.set(0, -1.5, 12.0);
+    this.substrateFillLight.target.position.set(0, -6.0, 0);
+    this.scene.add(this.substrateFillLight);
+    this.scene.add(this.substrateFillLight.target);
   }
 
   private initVolumetricScattering() {
@@ -620,6 +628,12 @@ export class AquariumSceneManager {
     if (this.boidClusterLight) {
       this.boidClusterLight.color.setHex(kfA.clusterColor).lerp(this.tmpColorB.setHex(kfB.clusterColor), s);
       this.boidClusterLight.intensity = kfA.clusterIntensity + (kfB.clusterIntensity - kfA.clusterIntensity) * s;
+    }
+
+    // Substrate & Rock Fill Light
+    if (this.substrateFillLight) {
+      const ambientMix = kfA.ambientIntensity + (kfB.ambientIntensity - kfA.ambientIntensity) * s;
+      this.substrateFillLight.intensity = Math.max(0.85, ambientMix * 0.85);
     }
 
     // 4. Volumetric God Rays
@@ -879,7 +893,7 @@ export class AquariumSceneManager {
     benchmarkEngine.markStage('ambientObjects');
 
     // 9. Update Micro-Fauna (Crabs, Snails, Ghost Shrimp, Hydromedusae)
-    this.microFaunaSim.update(dt);
+    this.microFaunaSim.update(dt, this.dayNightCycle.currentPhase);
     benchmarkEngine.markStage('microFaunaSim');
 
     this.microFaunaRenderer.update(dt);

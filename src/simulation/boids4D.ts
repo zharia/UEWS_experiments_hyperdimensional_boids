@@ -149,6 +149,9 @@ export class BoidSimulation4D {
         temporalAlpha: 1.0,
         bioluminescence: 0.8 + Math.random() * 0.2,
         mass: 7.5, // High inertia
+        burstPhase: Math.random(),
+        isBursting: true,
+        curiosityTimer: 0,
       });
     }
 
@@ -186,6 +189,9 @@ export class BoidSimulation4D {
         temporalAlpha: 1.0,
         bioluminescence: 0.5 + Math.random() * 0.5,
         mass: 1.0,
+        burstPhase: Math.random(),
+        isBursting: Math.random() > 0.4,
+        curiosityTimer: 0,
       });
     }
 
@@ -503,7 +509,7 @@ export class BoidSimulation4D {
       // Acceleration accumulators
       let ax = 0, ay = 0, az = 0, aw = 0;
 
-      // Meso fish avoid Macro Leviathans (dynamic obstacle clearance from cached macro boids)
+      // Meso fish avoid Macro Leviathans (dynamic obstacle clearance with lateral fountain splitting)
       if (!isMacro) {
         for (let m = 0; m < this.macroBoidsCache.length; m++) {
           const macro = this.macroBoidsCache[m];
@@ -511,13 +517,74 @@ export class BoidSimulation4D {
           const mdy = b.y - macro.y;
           const mdz = b.z - macro.z;
           const distSq = mdx * mdx + mdy * mdy + mdz * mdz;
-          const clearanceRadius = 4.8;
+          const clearanceRadius = 5.2;
           if (distSq < clearanceRadius * clearanceRadius && distSq > 0.001) {
             const dist = Math.sqrt(distSq);
-            const repelStrength = (clearanceRadius - dist) * 7.5;
+            const repelStrength = (clearanceRadius - dist) * 8.5;
+            // Radial pushback
             ax += (mdx / dist) * repelStrength;
-            ay += (mdy / dist) * repelStrength * 0.7;
+            ay += (mdy / dist) * repelStrength * 0.6;
             az += (mdz / dist) * repelStrength;
+
+            // Lateral fountain split around incoming leviathan heading
+            const mSpeed = Math.sqrt(macro.vx * macro.vx + macro.vz * macro.vz) || 0.01;
+            const lateralX = -macro.vz / mSpeed;
+            const lateralZ = macro.vx / mSpeed;
+            const sideDot = (mdx * lateralX + mdz * lateralZ) >= 0 ? 1 : -1;
+            ax += lateralX * sideDot * repelStrength * 0.55;
+            az += lateralZ * sideDot * repelStrength * 0.55;
+
+            b.isBursting = true; // Trigger startle burst
+          }
+        }
+
+        // Reef & Substrate Curiosity Hovering (fish break off briefly to inspect rock/plants/glass)
+        if (b.curiosityTimer === undefined) b.curiosityTimer = 0;
+        if (b.curiosityTimer > 0) {
+          b.curiosityTimer -= clampedDt;
+          if (b.curiosityTarget) {
+            const cdx = b.curiosityTarget.x - b.x;
+            const cdy = b.curiosityTarget.y - b.y;
+            const cdz = b.curiosityTarget.z - b.z;
+            const cDist = Math.sqrt(cdx * cdx + cdy * cdy + cdz * cdz) || 1;
+            if (cDist > 0.6) {
+              ax += (cdx / cDist) * 2.4;
+              ay += (cdy / cDist) * 1.8;
+              az += (cdz / cDist) * 2.4;
+            } else {
+              // Gentle hovering & pitching down toward substrate
+              ax -= b.vx * 1.6;
+              ay -= b.vy * 1.6;
+              az -= b.vz * 1.6;
+            }
+          }
+        } else {
+          // Subtle probability to explore a reef crevice, plant frond, or glass
+          if (Math.random() < 0.0025 && this.foodPellets.length === 0) {
+            b.curiosityTimer = 2.2 + Math.random() * 2.5;
+            const pick = Math.random();
+            if (pick < 0.45) {
+              // Central rock cluster crevices
+              b.curiosityTarget = {
+                x: -4.0 + Math.random() * 8.0,
+                y: -5.0 + Math.random() * 1.8,
+                z: -2.0 + Math.random() * 4.0,
+              };
+            } else if (pick < 0.8) {
+              // Lateral plant fronds
+              b.curiosityTarget = {
+                x: (Math.random() > 0.5 ? 6.5 : -6.5) + (Math.random() - 0.5) * 3.0,
+                y: -3.8 + Math.random() * 3.5,
+                z: -2.5 + Math.random() * 4.0,
+              };
+            } else {
+              // Front glass inspection
+              b.curiosityTarget = {
+                x: -7.0 + Math.random() * 14.0,
+                y: -3.5 + Math.random() * 6.0,
+                z: 4.8 + Math.random() * 0.8,
+              };
+            }
           }
         }
       }
@@ -699,18 +766,25 @@ export class BoidSimulation4D {
       if (b.w < this.bounds.minW) b.w += wSpan;
       if (b.w > this.bounds.maxW) b.w -= wSpan;
 
-      // Disturbance avoidance (Macro is resilient, Meso scatters)
+      // Disturbance avoidance (Macro is resilient, Meso executes dynamic flash expansion)
       if (this.disturbance && !isMacro) {
         const ddx = b.x - this.disturbance.x;
         const ddy = b.y - this.disturbance.y;
         const ddz = b.z - this.disturbance.z;
         const distDisturbSq = ddx * ddx + ddy * ddy + ddz * ddz;
-        if (distDisturbSq < 25.0 && distDisturbSq > 0.01) {
+        if (distDisturbSq < 36.0 && distDisturbSq > 0.01) {
           const ddist = Math.sqrt(distDisturbSq);
-          const force = (1.0 - ddist / 5.0) * this.disturbance.strength * 8.0;
+          const force = (1.0 - ddist / 6.0) * this.disturbance.strength * 12.0;
+          // Radial explosive scatter
           ax += (ddx / ddist) * force;
-          ay += (ddy / ddist) * force;
+          ay += (ddy / ddist) * force * 0.7;
           az += (ddz / ddist) * force;
+          // Lateral fountain curling split
+          ax += (-ddz / ddist) * force * 0.4;
+          az += (ddx / ddist) * force * 0.4;
+
+          b.isBursting = true;
+          b.bioluminescence = Math.min(1.0, b.bioluminescence + 0.5);
         }
       }
 
@@ -720,11 +794,35 @@ export class BoidSimulation4D {
         az += Math.sin(b.swimPhase * 0.3) * 0.35;
       }
 
-      // Forward urge
-      const currentSpeed = Math.sqrt(b.vx * b.vx + b.vy * b.vy + b.vz * b.vz) || 0.01;
-      ax += (b.vx / currentSpeed) * (isMacro ? 0.08 : 0.15);
-      ay += (b.vy / currentSpeed) * (isMacro ? 0.04 : 0.08);
-      az += (b.vz / currentSpeed) * (isMacro ? 0.08 : 0.15);
+      // Burst-and-Coast Kinematics: Natural Intermittent Swimming Rhythm
+      if (!isMacro) {
+        if (b.burstPhase === undefined) b.burstPhase = Math.random();
+        const burstPeriod = 1.1 + (b.speciesIndex % 3) * 0.25;
+        b.burstPhase = (b.burstPhase + clampedDt / burstPeriod) % 1.0;
+
+        const isUrgent = (this.disturbance !== null) || (closestFood !== null) || (b.curiosityTimer !== undefined && b.curiosityTimer > 0);
+        b.isBursting = isUrgent || (b.burstPhase < 0.38);
+
+        const currentSpeed = Math.sqrt(b.vx * b.vx + b.vy * b.vy + b.vz * b.vz) || 0.01;
+        if (b.isBursting) {
+          // Burst phase: active tail propulsion acceleration
+          const burstThrust = 0.45;
+          ax += (b.vx / currentSpeed) * burstThrust;
+          ay += (b.vy / currentSpeed) * (burstThrust * 0.3);
+          az += (b.vz / currentSpeed) * burstThrust;
+        } else {
+          // Coast phase: hydrodynamic gliding with low-drag decay
+          ax -= b.vx * 0.22;
+          ay -= b.vy * 0.22;
+          az -= b.vz * 0.22;
+        }
+      } else {
+        // Forward urge for macro giants
+        const currentSpeed = Math.sqrt(b.vx * b.vx + b.vy * b.vy + b.vz * b.vz) || 0.01;
+        ax += (b.vx / currentSpeed) * 0.08;
+        ay += (b.vy / currentSpeed) * 0.04;
+        az += (b.vz / currentSpeed) * 0.08;
+      }
 
       // Mass inertia division
       ax /= b.mass;
@@ -744,7 +842,7 @@ export class BoidSimulation4D {
       // Speed clamping
       const newSpeed = Math.sqrt(b.vx * b.vx + b.vy * b.vy + b.vz * b.vz);
       const targetMax = cfg.maxSpeed * (closestFood ? 1.35 : 1.0);
-      const minSpeed = isMacro ? 0.9 : 0.6;
+      const minSpeed = isMacro ? 0.9 : 0.55;
       if (newSpeed > targetMax) {
         const scale = targetMax / newSpeed;
         b.vx *= scale;
@@ -773,7 +871,13 @@ export class BoidSimulation4D {
       if (b.z < this.bounds.minZ) { b.z = this.bounds.minZ; b.vz = Math.abs(b.vz); }
       if (b.z > this.bounds.maxZ) { b.z = this.bounds.maxZ; b.vz = -Math.abs(b.vz); }
 
-      b.swimPhase += b.speed * cfg.tailWagFrequency * clampedDt;
+      // Intermittent Swim Phase: Active tail strokes during burst, smooth glide during coast
+      if (!isMacro) {
+        const strokeMultiplier = b.isBursting ? 1.35 : 0.18;
+        b.swimPhase += b.speed * cfg.tailWagFrequency * strokeMultiplier * clampedDt;
+      } else {
+        b.swimPhase += b.speed * cfg.tailWagFrequency * clampedDt;
+      }
       b.bioluminescence = Math.max(0.35, b.bioluminescence - clampedDt * 0.2);
 
       totalKinetic += b.speed;

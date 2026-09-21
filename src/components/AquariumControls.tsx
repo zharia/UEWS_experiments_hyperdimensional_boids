@@ -1145,7 +1145,7 @@ export const AquariumControls: React.FC<AquariumControlsProps> = ({
           {/* 4D Multi-Scalar Species Field Guide */}
           <div className="pt-3 border-t border-slate-800 flex flex-col gap-2">
             <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold">
-              Species & Ecosystem Field Guide ({SPECIES_CONFIGS.length + 5})
+              Species & Ecosystem Field Guide ({SPECIES_CONFIGS.length + 4})
             </span>
             <div className="flex flex-col gap-1.5">
               {SPECIES_CONFIGS.map((sp, idx) => {
@@ -1220,7 +1220,7 @@ export const AquariumControls: React.FC<AquariumControlsProps> = ({
                   </span>
                 </div>
                 <p className="text-[10px] text-slate-400 italic pl-5">
-                  Stalking along the sandy seabed with alternating tripod walking legs, waving asymmetrical claws, and raising defensive chelae when startled.
+                  Smooth-sculpted carapaces with gastric lobes and logarithmic spiral conch shells, 3-segment articulated walking legs (merus, carpus, dactylus), serrated clamping chelae, and exploratory antennules.
                 </p>
               </div>
 
@@ -1236,39 +1236,23 @@ export const AquariumControls: React.FC<AquariumControlsProps> = ({
                   </span>
                 </div>
                 <p className="text-[10px] text-slate-400 italic pl-5">
-                  Slow rhythmic gliders traversing front glass panels and rocks, wiping algae clean with their scraping radulas and tactile sensory tentacles.
+                  Helicospiral shells with smooth-min suture blending and flared aperture lips, crawling on cohesive muscular soles with peristaltic locomotion waves, dorsal operculum plates, and tactile ommatophore tentacles.
                 </p>
               </div>
 
-              {/* Crystal Ghost Shrimp */}
+              {/* Bioluminescent Hydromedusae */}
               <div className="flex flex-col gap-1 p-2 rounded-xl bg-slate-800/40 border border-cyan-900/50 text-xs">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className="w-3.5 h-3.5 rounded-full border border-cyan-300 shadow-[0_0_8px_#67e8f9] bg-cyan-200/60" />
-                    <span className="text-slate-200 font-medium">Crystal Ghost Shrimp</span>
-                  </div>
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800/60">
-                    Epibenthic 0.38x
-                  </span>
-                </div>
-                <p className="text-[10px] text-slate-400 italic pl-5">
-                  Glass-clear carapace with visible internal bioluminescence, undulating pleopods for hovering, and explosive backward caridoid tail-flip escapes.
-                </p>
-              </div>
-
-              {/* Hydromedusae */}
-              <div className="flex flex-col gap-1 p-2 rounded-xl bg-slate-800/40 border border-cyan-900/50 text-xs">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3.5 h-3.5 rounded-full border border-sky-400 shadow-[0_0_8px_#38bdf8] bg-sky-400/80" />
+                    <div className="w-3.5 h-3.5 rounded-full border border-cyan-300 shadow-[0_0_8px_#38bdf8] bg-cyan-400/80" />
                     <span className="text-slate-200 font-medium">Bioluminescent Hydromedusae</span>
                   </div>
                   <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800/60">
-                    Pelagic 0.28x
+                    Pelagic 0.32x
                   </span>
                 </div>
                 <p className="text-[10px] text-slate-400 italic pl-5">
-                  Delicate gelatinous hydrozoans with soft-body mesoglea physics: peristaltic traveling constriction waves, elastic recoil flaring, and 12-node Verlet trailing tentacles responding to currents and jet wakes.
+                  Delicate translucent hydrozoan umbrella bell with dynamic peristaltic contraction, radial canals, internal glowing manubrium, marginal rhopalia beads, and gracefully trailing fluid tentacles.
                 </p>
               </div>
             </div>

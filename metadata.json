@@ -1,6 +1,6 @@
 {
   "name": "Chronos Aquarium - 4D Boid Fish Tank",
-  "description": "A 2.5D interactive fish tank on a desk featuring 4D temporal flocking boids, GPU-accelerated simulation, dynamic responsive light scattering, procedural micro-flora glass growth, and realistic coral reefs.",
+  "description": "A 2.5D interactive fish tank on a desk featuring 4D temporal flocking boids, screen space displacement fluid refraction, procedural micro-fauna with smooth-min blended morphology and articulated kinematics, dynamic light scattering, and realistic coral reefs.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
