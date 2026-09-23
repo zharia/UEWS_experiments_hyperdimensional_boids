@@ -238,3 +238,26 @@ export interface SimulationStats {
   medusaCount: number;
   totalMicroFauna: number;
 }
+
+export interface InspectedOrganism {
+  id: string;
+  type: 'boid' | 'microfauna';
+  name: string;
+  scientificName: string;
+  category: string;
+  speciesIndex?: number;
+  description?: string;
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vy: number;
+  vz: number;
+  speed: number;
+  w?: number;
+  scale: number;
+  state: string;
+  energy: number; // 0 - 100
+  alertness?: number; // 0 - 1
+  colorHex?: string;
+}

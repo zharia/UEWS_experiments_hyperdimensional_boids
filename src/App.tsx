@@ -14,8 +14,10 @@ import { FloraOverlay } from './components/FloraOverlay';
 import { BenchmarkPanel } from './components/BenchmarkPanel';
 import { BotanicalPanel } from './components/BotanicalPanel';
 import { EcosystemInspectorModal } from './components/EcosystemInspectorModal';
+import { OrganismDossierCard } from './components/OrganismDossierCard';
+import { ShortcutsHelpModal } from './components/ShortcutsHelpModal';
 import { EcologySimulation } from './simulation/EcologySimulation';
-import { InteractionTool, LightingPreset, SimulationStats } from './types';
+import { InspectedOrganism, InteractionTool, LightingPreset, SimulationStats } from './types';
 
 export default function App() {
   const canvasContainerRef = useRef<HTMLDivElement>(null);
@@ -37,6 +39,13 @@ export default function App() {
   const [showBenchmark, setShowBenchmark] = useState<boolean>(false);
   const [showBotanical, setShowBotanical] = useState<boolean>(false);
   const [showEcology, setShowEcology] = useState<boolean>(false);
+  const [showShortcuts, setShowShortcuts] = useState<boolean>(false);
+
+  // Organism Focus & Zen Camera State
+  const [inspectedOrganism, setInspectedOrganism] = useState<InspectedOrganism | null>(null);
+  const [isTrackingCamera, setIsTrackingCamera] = useState<boolean>(true);
+  const [isZenTour, setIsZenTour] = useState<boolean>(false);
+  const [snapshotFlash, setSnapshotFlash] = useState<boolean>(false);
 
   // Telemetry stats
   const [stats, setStats] = useState<SimulationStats>({
@@ -76,10 +85,22 @@ export default function App() {
       boidSim,
       floraSim
     );
+    manager.onOrganismSelect = (org) => {
+      setInspectedOrganism(org);
+      if (org) {
+        setCurrentTool('inspect');
+      }
+    };
     setSceneManager(manager);
 
     // Telemetry update interval (runs at 3 Hz to minimize React state churn)
     const intervalId = setInterval(() => {
+      // Sync inspected organism telemetry live
+      if (manager.trackedOrganism) {
+        const live = manager.getInspectedOrganismLiveData(manager.trackedOrganism.id);
+        if (live) setInspectedOrganism(live);
+      }
+
       // Count visible fish and fireflies in current 4D time slice
       let visible = 0;
       const boids = boidSim.boids;
@@ -171,19 +192,54 @@ export default function App() {
     setShowEchoes(next);
   };
 
+  const handleToggleZenTour = () => {
+    const next = sceneManager?.toggleZenTour() ?? !isZenTour;
+    setIsZenTour(next);
+    if (next) {
+      setInspectedOrganism(null);
+    }
+  };
+
+  const handleCaptureSnapshot = () => {
+    setSnapshotFlash(true);
+    setTimeout(() => setSnapshotFlash(false), 220);
+    sceneManager?.captureSnapshot();
+  };
+
+  const handleToggleTrackingCamera = () => {
+    const next = !isTrackingCamera;
+    setIsTrackingCamera(next);
+    sceneManager?.setTrackingCamera(next);
+  };
+
+  const handleCloseDossier = () => {
+    setInspectedOrganism(null);
+    sceneManager?.clearInspectedOrganism();
+  };
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
       if (e.code === 'Space') {
         e.preventDefault();
         const nextDir = timeDirection === 0 ? 1 : 0;
         handleTogglePlay(nextDir);
+      } else if (e.key === 'i' || e.key === 'I') {
+        setCurrentTool('inspect');
       } else if (e.key === 'f' || e.key === 'F') {
         setCurrentTool('feed');
+      } else if (e.key === 'w' || e.key === 'W') {
+        setCurrentTool('wafer');
       } else if (e.key === 'c' || e.key === 'C') {
         setCurrentTool('clean_glass');
+      } else if (e.key === 's' || e.key === 'S') {
+        setCurrentTool('stir_water');
+      } else if (e.key === 'z' || e.key === 'Z') {
+        handleToggleZenTour();
+      } else if (e.key === 'p' || e.key === 'P') {
+        handleCaptureSnapshot();
       } else if (e.key === 'l' || e.key === 'L') {
         handleToggleDeskLamp();
       } else if (e.key === '1') {
@@ -198,12 +254,26 @@ export default function App() {
         setShowBenchmark((prev) => !prev);
       } else if (e.key === 'e' || e.key === 'E') {
         setShowEcology((prev) => !prev);
+      } else if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+        setShowShortcuts((prev) => !prev);
+      } else if (e.key === 'Escape') {
+        if (inspectedOrganism) {
+          handleCloseDossier();
+        } else if (showShortcuts) {
+          setShowShortcuts(false);
+        } else if (showBenchmark) {
+          setShowBenchmark(false);
+        } else if (showBotanical) {
+          setShowBotanical(false);
+        } else if (showEcology) {
+          setShowEcology(false);
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [timeDirection, sceneManager]);
+  }, [timeDirection, sceneManager, isZenTour, inspectedOrganism, showShortcuts, showBenchmark, showBotanical, showEcology]);
 
   return (
     <main className="relative w-screen h-screen overflow-hidden bg-slate-950 select-none">
@@ -221,6 +291,10 @@ export default function App() {
       <DeskHeader
         stats={stats}
         currentPhase={ecologySim.phaseEngine.currentPhase}
+        isZenTour={isZenTour}
+        onToggleZenTour={handleToggleZenTour}
+        onCaptureSnapshot={handleCaptureSnapshot}
+        onOpenShortcuts={() => setShowShortcuts(true)}
         onOpenBenchmark={() => setShowBenchmark(true)}
         onOpenBotanical={() => setShowBotanical(true)}
         onOpenEcology={() => setShowEcology(true)}
@@ -252,6 +326,21 @@ export default function App() {
         onToggleEchoes={handleToggleEchoes}
       />
 
+      {/* Live Organism Dossier Card HUD */}
+      <OrganismDossierCard
+        organism={inspectedOrganism}
+        onClose={handleCloseDossier}
+        isTrackingCamera={isTrackingCamera}
+        onToggleTrackingCamera={handleToggleTrackingCamera}
+        sceneManager={sceneManager}
+      />
+
+      {/* Keyboard Shortcuts & Controls Modal */}
+      <ShortcutsHelpModal
+        isOpen={showShortcuts}
+        onClose={() => setShowShortcuts(false)}
+      />
+
       {/* Botanical Plant Morphology & Lifecycle Management HUD */}
       <BotanicalPanel
         isOpen={showBotanical}
@@ -270,6 +359,13 @@ export default function App() {
         isOpen={showEcology}
         onClose={() => setShowEcology(false)}
         ecologySim={ecologySim}
+      />
+
+      {/* High-res camera shutter visual flash effect */}
+      <div
+        className={`absolute inset-0 bg-white transition-opacity duration-200 pointer-events-none z-50 ${
+          snapshotFlash ? 'opacity-90' : 'opacity-0'
+        }`}
       />
 
       {/* Subtle bottom room ambient vignette */}

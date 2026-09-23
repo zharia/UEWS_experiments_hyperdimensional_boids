@@ -8,7 +8,12 @@
 import { Vector3D, IVector3D } from '../../space/physical/Vector3D';
 import { ISpatialFieldProvider } from '../../space/fields/EnvironmentalField';
 
-export type ResourceType = 'food_pellet' | 'biofilm_patch' | 'shelter_crevice' | 'vegetation_frond';
+export type ResourceType =
+  | 'food_pellet'
+  | 'biofilm_patch'
+  | 'shelter_crevice'
+  | 'vegetation_frond'
+  | 'detritus';
 
 export interface EcologicalResource {
   id: string;
@@ -19,6 +24,7 @@ export interface EcologicalResource {
   regenerationRate: number; // units per second (e.g. algae regrowth)
   createdAt: number;
   decayTimeSeconds: number;
+  originAgentId?: string;
 }
 
 export interface IResourceSystemJSON {
@@ -31,6 +37,7 @@ export interface IResourceSystemJSON {
     regenerationRate: number;
     createdAt: number;
     decayTimeSeconds: number;
+    originAgentId?: string;
   }[];
 }
 
@@ -92,14 +99,30 @@ export class ResourceSystem {
     return pellet;
   }
 
+  public addDetritus(pos: IVector3D, simTime: number, biomass: number = 1.0, originAgentId?: string): EcologicalResource {
+    const detritus: EcologicalResource = {
+      id: 'detritus_' + Math.random().toString(36).substring(2, 9),
+      type: 'detritus',
+      position: new Vector3D(pos.x, pos.y, pos.z),
+      quantity: biomass,
+      maxQuantity: biomass,
+      regenerationRate: 0,
+      createdAt: simTime,
+      decayTimeSeconds: 90.0,
+      originAgentId,
+    };
+    this.resources.push(detritus);
+    return detritus;
+  }
+
   public update(simDt: number, simTime: number, fields?: ISpatialFieldProvider): void {
     for (let i = this.resources.length - 1; i >= 0; i--) {
       const res = this.resources[i];
 
-      // Sinking dynamics for food pellets
-      if (res.type === 'food_pellet') {
+      // Sinking dynamics for food pellets & detritus
+      if (res.type === 'food_pellet' || res.type === 'detritus') {
         if (res.position.y > -6.5) {
-          res.position.y -= 0.65 * simDt;
+          res.position.y -= (res.type === 'food_pellet' ? 0.65 : 0.4) * simDt;
         }
         
         // Dissolve into water column if left unconsumed
@@ -108,9 +131,10 @@ export class ResourceSystem {
         }
 
         if (simTime - res.createdAt > res.decayTimeSeconds) {
-          // Food decomposes into organic nutrients
+          // Decomposes into organic nutrients & consumes oxygen
           if (fields) {
-            fields.add(res.position.x, res.position.y, res.position.z, 'nutrients', 0.15);
+            fields.add(res.position.x, res.position.y, res.position.z, 'nutrients', res.type === 'detritus' ? 0.35 : 0.15);
+            fields.add(res.position.x, res.position.y, res.position.z, 'oxygen', -0.05);
           }
           this.resources.splice(i, 1);
           continue;
@@ -125,6 +149,11 @@ export class ResourceSystem {
           const light = fields.sample(res.position.x, res.position.y, res.position.z, 'illumination');
           const nut = fields.sample(res.position.x, res.position.y, res.position.z, 'nutrients');
           boost = (0.5 + light) * (0.5 + nut);
+
+          // Photosynthetic oxygen generation
+          if (res.type === 'vegetation_frond' || res.type === 'biofilm_patch') {
+            fields.add(res.position.x, res.position.y, res.position.z, 'oxygen', 0.02 * light * simDt);
+          }
         }
         res.quantity = Math.min(res.maxQuantity, res.quantity + res.regenerationRate * boost * simDt);
       }
@@ -144,7 +173,7 @@ export class ResourceSystem {
       fields.add(res.position.x, res.position.y, res.position.z, 'nutrients', taken * 0.08);
     }
 
-    if (res.type === 'food_pellet' && res.quantity <= 0.01) {
+    if ((res.type === 'food_pellet' || res.type === 'detritus') && res.quantity <= 0.01) {
       this.resources.splice(idx, 1);
     }
 
@@ -162,6 +191,7 @@ export class ResourceSystem {
         regenerationRate: r.regenerationRate,
         createdAt: r.createdAt,
         decayTimeSeconds: r.decayTimeSeconds,
+        originAgentId: r.originAgentId,
       })),
     };
   }
@@ -177,6 +207,7 @@ export class ResourceSystem {
       regenerationRate: r.regenerationRate,
       createdAt: r.createdAt,
       decayTimeSeconds: r.decayTimeSeconds,
+      originAgentId: r.originAgentId,
     }));
   }
 }

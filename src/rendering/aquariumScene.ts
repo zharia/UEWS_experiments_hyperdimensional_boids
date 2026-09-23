@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { BoidSimulation4D } from '../simulation/boids4D';
 import { ProceduralFloraSimulation } from '../simulation/flora';
-import { DayNightCycleConfig, LightingConfig, LightingPreset } from '../types';
+import { DayNightCycleConfig, InspectedOrganism, LightingConfig, LightingPreset } from '../types';
 import { CoralSceneObjects, createCoralReef } from './coralGeometries';
 import { createFishGeometry, createFishShaderMaterial } from './fishShaders';
 import { createFireflyMesh, FireflyMeshSystem } from './fireflyShaders';
@@ -15,6 +15,7 @@ import { MicroFaunaRenderer } from './microFaunaRender';
 import { aquariumAudio } from '../audio/aquariumAudio';
 import { benchmarkEngine } from '../utils/performanceBenchmark';
 import { ScreenSpaceDisplacementPass } from './screenSpaceDisplacement';
+import { SPECIES_CONFIGS } from '../simulation/species';
 
 interface CircadianKeyframe {
   phase: number;
@@ -149,6 +150,14 @@ export class AquariumSceneManager {
   public currentFps: number = 60;
   private frameCount: number = 0;
   private lastFpsTime: number = performance.now();
+
+  // Organism Inspection & Cinematic Camera Modes
+  public isZenTour: boolean = false;
+  public trackedOrganism: InspectedOrganism | null = null;
+  public isTrackingCamera: boolean = true;
+  public onOrganismSelect?: (organism: InspectedOrganism | null) => void;
+  private currentLookAt: THREE.Vector3 = new THREE.Vector3(0, -0.2, 0);
+  private targetLookAt: THREE.Vector3 = new THREE.Vector3(0, -0.2, 0);
 
   // Screen Space Displacement (SSD) Post-Processing Pipeline
   public ssdPass!: ScreenSpaceDisplacementPass;
@@ -712,12 +721,43 @@ export class AquariumSceneManager {
       const dt = Math.min(this.clock.getDelta(), 0.05);
       const elapsedTime = this.clock.getElapsedTime();
 
-      // 1. Smooth 2.5D Optical Parallax on the Desk Viewport
-      const targetCamX = this.targetCameraOffset.x;
-      const targetCamY = 1.8 + this.targetCameraOffset.y;
-      this.camera.position.x += (targetCamX - this.camera.position.x) * 0.04;
-      this.camera.position.y += (targetCamY - this.camera.position.y) * 0.04;
-      this.camera.lookAt(0, -0.2, 0);
+      // 1. Camera Viewport Motion (Parallax, Zen Cinematic Tour, or Organism Tracking)
+      if (this.isZenTour) {
+        // Smooth continuous 3D Lissajous orbit across the desk aquarium
+        const angle = elapsedTime * 0.09;
+        const targetCamX = Math.sin(angle) * 7.5;
+        const targetCamY = 1.8 + Math.sin(elapsedTime * 0.14) * 2.2;
+        const targetCamZ = 26.5 + Math.cos(angle) * 3.8;
+        this.camera.position.x += (targetCamX - this.camera.position.x) * 0.035;
+        this.camera.position.y += (targetCamY - this.camera.position.y) * 0.035;
+        this.camera.position.z += (targetCamZ - this.camera.position.z) * 0.035;
+        this.targetLookAt.set(Math.sin(angle * 0.7) * 3.5, -0.5 + Math.sin(angle * 1.1) * 1.5, 0);
+      } else if (this.trackedOrganism && this.isTrackingCamera) {
+        // Track live coordinates of inspected creature
+        const live = this.getInspectedOrganismLiveData(this.trackedOrganism.id);
+        if (live) {
+          this.trackedOrganism = live;
+          const targetCamX = THREE.MathUtils.clamp(live.x * 0.65, -9, 9) + this.targetCameraOffset.x;
+          const targetCamY = THREE.MathUtils.clamp(live.y * 0.65 + 1.8, -2, 5) + this.targetCameraOffset.y;
+          const targetCamZ = 24.5;
+          this.camera.position.x += (targetCamX - this.camera.position.x) * 0.05;
+          this.camera.position.y += (targetCamY - this.camera.position.y) * 0.05;
+          this.camera.position.z += (targetCamZ - this.camera.position.z) * 0.05;
+          this.targetLookAt.set(live.x, live.y, live.z);
+        } else {
+          this.targetLookAt.set(0, -0.2, 0);
+        }
+      } else {
+        // Default 2.5D optical parallax
+        const targetCamX = this.targetCameraOffset.x;
+        const targetCamY = 1.8 + this.targetCameraOffset.y;
+        this.camera.position.x += (targetCamX - this.camera.position.x) * 0.04;
+        this.camera.position.y += (targetCamY - this.camera.position.y) * 0.04;
+        this.camera.position.z += (26.5 - this.camera.position.z) * 0.04;
+        this.targetLookAt.set(0, -0.2, 0);
+      }
+      this.currentLookAt.lerp(this.targetLookAt, 0.05);
+      this.camera.lookAt(this.currentLookAt);
 
       // 2. Update 4D Boids simulation
       this.boidSim.update(dt);
@@ -1060,6 +1100,261 @@ export class AquariumSceneManager {
       pos[idx + 2] = z + (Math.random() - 0.5) * 0.3;
     }
     this.coralObjects.bubbleSystem.geometry.attributes.position.needsUpdate = true;
+  }
+
+  /**
+   * Raycast into the 3D water volume to find and select the closest organism (fish or micro-fauna).
+   */
+  public raycastOrganism(screenX: number, screenY: number): InspectedOrganism | null {
+    const rect = this.container.getBoundingClientRect();
+    const mouseX = ((screenX - rect.left) / rect.width) * 2 - 1;
+    const mouseY = -((screenY - rect.top) / rect.height) * 2 + 1;
+
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(new THREE.Vector2(mouseX, mouseY), this.camera);
+    const ray = raycaster.ray;
+
+    let closestDist = Infinity;
+    let selected: InspectedOrganism | null = null;
+    const tmpPt = new THREE.Vector3();
+
+    // 1. Check Boid School & Pelagic Leviathans
+    const boids = this.boidSim.boids;
+    for (let i = 0; i < boids.length; i++) {
+      const b = boids[i];
+      if (b.temporalAlpha < 0.15) continue;
+      tmpPt.set(b.x, b.y, b.z);
+      const distToRay = ray.distanceToPoint(tmpPt);
+      const maxDist = Math.max(1.5, b.scale * 1.6);
+      if (distToRay < maxDist) {
+        const depthDist = ray.origin.distanceTo(tmpPt);
+        const score = distToRay * 2.0 + depthDist * 0.5;
+        if (score < closestDist) {
+          closestDist = score;
+          const cfg = SPECIES_CONFIGS[b.speciesIndex] || SPECIES_CONFIGS[0];
+          const speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy + b.vz * b.vz);
+          let state = 'Cruising';
+          if (b.isBursting) state = 'Burst Propulsion';
+          else if (b.speed < 1.0) state = 'Gliding / Coasting';
+          else if (b.curiosityTimer && b.curiosityTimer > 0) state = 'Investigating Reef';
+
+          selected = {
+            id: `boid_${i}`,
+            type: 'boid',
+            speciesIndex: b.speciesIndex,
+            name: cfg.name,
+            scientificName: this.getScientificName(cfg.name),
+            category: cfg.regime === 'macro_pelagic' ? 'Macro Pelagic Leviathan' : 'Meso Schooling Teleost',
+            description: cfg.description,
+            x: b.x,
+            y: b.y,
+            z: b.z,
+            vx: b.vx,
+            vy: b.vy,
+            vz: b.vz,
+            speed: parseFloat(speed.toFixed(2)),
+            w: parseFloat(b.w.toFixed(1)),
+            scale: parseFloat(b.scale.toFixed(2)),
+            state,
+            energy: Math.min(100, Math.round(65 + Math.sin(b.swimPhase) * 20)),
+            alertness: b.isBursting ? 0.8 : 0.2,
+            colorHex: cfg.regime === 'macro_pelagic' ? '#c084fc' : '#38bdf8',
+          };
+        }
+      }
+    }
+
+    // 2. Check Benthic & Epibenthic Micro-Fauna (Crabs, Snails, Shrimp, Medusae)
+    const entities = this.microFaunaSim.entities;
+    for (let i = 0; i < entities.length; i++) {
+      const e = entities[i];
+      tmpPt.set(e.x, e.y, e.z);
+      const distToRay = ray.distanceToPoint(tmpPt);
+      const maxDist = Math.max(1.4, e.sizeScale * 1.5);
+      if (distToRay < maxDist) {
+        const depthDist = ray.origin.distanceTo(tmpPt);
+        const score = distToRay * 2.0 + depthDist * 0.5;
+        if (score < closestDist) {
+          closestDist = score;
+          const speed = Math.sqrt(e.vx * e.vx + e.vy * e.vy + e.vz * e.vz);
+          const stateFormatted = e.state
+            .split('_')
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(' ');
+
+          selected = {
+            id: e.id,
+            type: 'microfauna',
+            name: e.name,
+            scientificName: this.getScientificName(e.species),
+            category: this.getCategoryLabel(e.category),
+            description: `Benthic micro-fauna attached to ${e.attachedSurface.replace('_', ' ')}.`,
+            x: e.x,
+            y: e.y,
+            z: e.z,
+            vx: e.vx,
+            vy: e.vy,
+            vz: e.vz,
+            speed: parseFloat(speed.toFixed(2)),
+            scale: parseFloat(e.sizeScale.toFixed(2)),
+            state: stateFormatted,
+            energy: Math.round(e.energy),
+            alertness: parseFloat(e.alertness.toFixed(2)),
+            colorHex: '#2dd4bf',
+          };
+        }
+      }
+    }
+
+    if (selected) {
+      this.trackedOrganism = selected;
+      aquariumAudio.playTemporalChime(1.15);
+      this.onOrganismSelect?.(selected);
+    }
+    return selected;
+  }
+
+  /**
+   * Retrieves live coordinate, velocity, and state for the currently inspected organism.
+   */
+  public getInspectedOrganismLiveData(id: string): InspectedOrganism | null {
+    if (!id) return null;
+    if (id.startsWith('boid_')) {
+      const idx = parseInt(id.replace('boid_', ''), 10);
+      const b = this.boidSim.boids[idx];
+      if (!b) return null;
+      const cfg = SPECIES_CONFIGS[b.speciesIndex] || SPECIES_CONFIGS[0];
+      const speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy + b.vz * b.vz);
+      let state = 'Cruising';
+      if (b.isBursting) state = 'Burst Propulsion';
+      else if (b.speed < 1.0) state = 'Gliding / Coasting';
+      else if (b.curiosityTimer && b.curiosityTimer > 0) state = 'Investigating Reef';
+
+      return {
+        id,
+        type: 'boid',
+        speciesIndex: b.speciesIndex,
+        name: cfg.name,
+        scientificName: this.getScientificName(cfg.name),
+        category: cfg.regime === 'macro_pelagic' ? 'Macro Pelagic Leviathan' : 'Meso Schooling Teleost',
+        description: cfg.description,
+        x: b.x,
+        y: b.y,
+        z: b.z,
+        vx: b.vx,
+        vy: b.vy,
+        vz: b.vz,
+        speed: parseFloat(speed.toFixed(2)),
+        w: parseFloat(b.w.toFixed(1)),
+        scale: parseFloat(b.scale.toFixed(2)),
+        state,
+        energy: Math.min(100, Math.round(65 + Math.sin(b.swimPhase) * 20)),
+        alertness: b.isBursting ? 0.8 : 0.2,
+        colorHex: cfg.regime === 'macro_pelagic' ? '#c084fc' : '#38bdf8',
+      };
+    } else {
+      const entity = this.microFaunaSim.entities.find((e) => e.id === id);
+      if (!entity) return null;
+      const speed = Math.sqrt(entity.vx * entity.vx + entity.vy * entity.vy + entity.vz * entity.vz);
+      const stateFormatted = entity.state
+        .split('_')
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+
+      return {
+        id: entity.id,
+        type: 'microfauna',
+        name: entity.name,
+        scientificName: this.getScientificName(entity.species),
+        category: this.getCategoryLabel(entity.category),
+        description: `Benthic micro-fauna attached to ${entity.attachedSurface.replace('_', ' ')}.`,
+        x: entity.x,
+        y: entity.y,
+        z: entity.z,
+        vx: entity.vx,
+        vy: entity.vy,
+        vz: entity.vz,
+        speed: parseFloat(speed.toFixed(2)),
+        scale: parseFloat(entity.sizeScale.toFixed(2)),
+        state: stateFormatted,
+        energy: Math.round(entity.energy),
+        alertness: parseFloat(entity.alertness.toFixed(2)),
+        colorHex: '#2dd4bf',
+      };
+    }
+  }
+
+  private getScientificName(key: string): string {
+    const map: Record<string, string> = {
+      'Titan Leviathan': 'Symphysodon aequifasciatus gigantea',
+      'Celestial Ray': 'Potamotrygon astraea',
+      'Neon Tetra': 'Paracheirodon innesi',
+      'Golden Guppy': 'Poecilia reticulata aurum',
+      'Azure Discus': 'Symphysodon haraldi caeruleus',
+      'Bioluminescent Tang': 'Paracanthurus lucens',
+      shore_crab: 'Pachygrapsus crassipes',
+      hermit_crab: 'Pagurus samuelis',
+      nerite_snail: 'Neritina natalensis',
+      mystery_snail: 'Pomacea bridgesii',
+      ghost_shrimp: 'Palaemonetes paludosus',
+      hydromedusa: 'Craspedacusta sowerbii',
+    };
+    return map[key] || 'Aquatica spec.';
+  }
+
+  private getCategoryLabel(cat: string): string {
+    const map: Record<string, string> = {
+      crab: 'Benthic Decapod Scavenger',
+      snail: 'Epibenthic Gastropod Grazer',
+      shrimp: 'Demersal Decapod Scavenger',
+      medusa: 'Pelagic Hydrozoan Medusa',
+    };
+    return map[cat] || 'Marine Invertebrate';
+  }
+
+  public selectOrganism(org: InspectedOrganism | null) {
+    this.trackedOrganism = org;
+    this.onOrganismSelect?.(org);
+  }
+
+  public clearInspectedOrganism() {
+    this.trackedOrganism = null;
+    this.onOrganismSelect?.(null);
+  }
+
+  public toggleZenTour(): boolean {
+    this.isZenTour = !this.isZenTour;
+    if (this.isZenTour) {
+      this.clearInspectedOrganism();
+    }
+    return this.isZenTour;
+  }
+
+  public setTrackingCamera(enabled: boolean) {
+    this.isTrackingCamera = enabled;
+  }
+
+  /**
+   * Captures a high-resolution lossless snapshot of the current 3D viewport and triggers download.
+   */
+  public captureSnapshot(): string {
+    // Render current frame directly
+    this.renderer.setRenderTarget(null);
+    this.renderer.render(this.scene, this.camera);
+
+    const dataUrl = this.renderer.domElement.toDataURL('image/png');
+    aquariumAudio.playCameraShutter();
+
+    // Trigger instant browser download
+    const link = document.createElement('a');
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    link.download = `chronos-aquarium-${timestamp}.png`;
+    link.href = dataUrl;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    return dataUrl;
   }
 
   private onPointerMove = (e: PointerEvent) => {

@@ -8,15 +8,18 @@ import {
   Activity,
   BarChart3,
   Brain,
+  Camera,
   Clock,
   Cpu,
   Eye,
   Fish,
+  HelpCircle,
   Moon,
   Sparkles,
   Sprout,
   Sun,
   Sunset,
+  Video,
   Volume2,
   VolumeX,
   Waves,
@@ -27,6 +30,10 @@ import { aquariumAudio } from '../audio/aquariumAudio';
 interface DeskHeaderProps {
   stats: SimulationStats;
   currentPhase?: string;
+  isZenTour?: boolean;
+  onToggleZenTour?: () => void;
+  onCaptureSnapshot?: () => void;
+  onOpenShortcuts?: () => void;
   onOpenBenchmark?: () => void;
   onOpenBotanical?: () => void;
   onOpenEcology?: () => void;
@@ -35,15 +42,31 @@ interface DeskHeaderProps {
 export const DeskHeader: React.FC<DeskHeaderProps> = ({
   stats,
   currentPhase = 'COLONISATION',
+  isZenTour = false,
+  onToggleZenTour,
+  onCaptureSnapshot,
+  onOpenShortcuts,
   onOpenBenchmark,
   onOpenBotanical,
   onOpenEcology,
 }) => {
   const [isMuted, setIsMuted] = useState(aquariumAudio.getIsMuted());
+  const [volume, setVolumeState] = useState(aquariumAudio.getVolume());
+  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
 
   const handleToggleSound = () => {
     const nextMuted = aquariumAudio.toggleMute();
     setIsMuted(nextMuted);
+  };
+
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseFloat(e.target.value);
+    setVolumeState(val);
+    aquariumAudio.setVolume(val);
+    if (isMuted && val > 0) {
+      const nextMuted = aquariumAudio.toggleMute();
+      setIsMuted(nextMuted);
+    }
   };
 
   // Circadian Time of Day formatting (Phase 0.0 = 06:00 Dawn, 0.25 = 12:00 Noon)
@@ -240,28 +263,100 @@ export const DeskHeader: React.FC<DeskHeaderProps> = ({
           <span>SSD Refraction</span>
         </div>
 
-        {/* Sound Toggle */}
-        <button
-          onClick={handleToggleSound}
-          title={isMuted ? 'Turn on relaxing aquarium ambient audio' : 'Mute aquarium audio'}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-mono transition-all ${
-            !isMuted
-              ? 'bg-cyan-950/90 text-cyan-300 border-cyan-700 shadow-sm hover:bg-cyan-900'
-              : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700'
-          }`}
-        >
-          {!isMuted ? (
-            <>
-              <Volume2 className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Audio On</span>
-            </>
-          ) : (
-            <>
-              <VolumeX className="w-3.5 h-3.5 text-slate-500" />
-              <span>Audio Muted</span>
-            </>
+        {/* Ambient Zen Cinematic Tour Toggle */}
+        {onToggleZenTour && (
+          <button
+            onClick={onToggleZenTour}
+            title={isZenTour ? 'Exit Zen Camera Tour (Hotkey: Z)' : 'Engage Ambient Zen Camera Tour (Hotkey: Z)'}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-mono transition-all cursor-pointer shadow-sm ${
+              isZenTour
+                ? 'bg-purple-950/90 text-purple-300 border-purple-500 shadow-[0_0_12px_rgba(168,85,247,0.3)] animate-pulse'
+                : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700'
+            }`}
+          >
+            <Video className="w-3.5 h-3.5 text-purple-400" />
+            <span className="hidden sm:inline">{isZenTour ? 'Zen Tour On' : 'Zen Tour'}</span>
+          </button>
+        )}
+
+        {/* High-Res Snapshot Capture */}
+        {onCaptureSnapshot && (
+          <button
+            onClick={onCaptureSnapshot}
+            title="Capture High-Res Photo Snapshot (Hotkey: P)"
+            className="flex items-center gap-1.5 bg-slate-900/80 hover:bg-slate-800/90 text-slate-300 hover:text-cyan-300 px-2.5 py-1.5 rounded-lg border border-slate-800 hover:border-cyan-700 text-xs font-mono transition-all cursor-pointer shadow-sm"
+          >
+            <Camera className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden sm:inline">Photo</span>
+          </button>
+        )}
+
+        {/* Audio Toggle & Volume Slider Popover */}
+        <div className="relative flex items-center">
+          <button
+            onClick={handleToggleSound}
+            onMouseEnter={() => setShowVolumeSlider(true)}
+            title={isMuted ? 'Turn on relaxing aquarium ambient audio' : 'Mute aquarium audio'}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-mono transition-all cursor-pointer ${
+              !isMuted
+                ? 'bg-cyan-950/90 text-cyan-300 border-cyan-700 shadow-sm hover:bg-cyan-900'
+                : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700'
+            }`}
+          >
+            {!isMuted ? (
+              <>
+                <Volume2 className="w-3.5 h-3.5 text-cyan-400" />
+                <span>{Math.round(volume * 100)}%</span>
+              </>
+            ) : (
+              <>
+                <VolumeX className="w-3.5 h-3.5 text-slate-500" />
+                <span>Audio Muted</span>
+              </>
+            )}
+          </button>
+
+          {/* Volume slider popover on hover or when expanded */}
+          {showVolumeSlider && (
+            <div
+              onMouseLeave={() => setShowVolumeSlider(false)}
+              className="absolute top-full right-0 mt-1.5 p-2.5 bg-slate-900/95 backdrop-blur-md border border-slate-700 rounded-xl shadow-2xl flex items-center gap-2 z-30 animate-in fade-in duration-150"
+            >
+              <VolumeX
+                className="w-3.5 h-3.5 text-slate-400 cursor-pointer hover:text-white"
+                onClick={() => {
+                  if (!isMuted) handleToggleSound();
+                }}
+              />
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.02"
+                value={isMuted ? 0 : volume}
+                onChange={handleVolumeChange}
+                className="w-24 accent-cyan-400 cursor-pointer"
+              />
+              <Volume2
+                className="w-3.5 h-3.5 text-cyan-400 cursor-pointer hover:scale-110"
+                onClick={() => {
+                  if (isMuted) handleToggleSound();
+                }}
+              />
+            </div>
           )}
-        </button>
+        </div>
+
+        {/* Keyboard Shortcuts Help */}
+        {onOpenShortcuts && (
+          <button
+            onClick={onOpenShortcuts}
+            title="Keyboard Shortcuts & Quick Guide (Hotkey: ?)"
+            className="flex items-center justify-center w-8 h-8 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 hover:border-slate-700 transition-all cursor-pointer shadow-sm"
+          >
+            <HelpCircle className="w-4 h-4" />
+          </button>
+        )}
       </div>
     </header>
   );

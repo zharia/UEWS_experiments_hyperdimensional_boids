@@ -7,6 +7,7 @@
  */
 
 import { Vector3D } from '../../space/physical/Vector3D';
+import { AnticScene, AnticSceneFactory } from '../scenes/AnticScene';
 
 export type AnticType =
   | 'THE_INVESTIGATION'
@@ -15,9 +16,12 @@ export type AnticType =
   | 'COOPERATIVE_SCHOOLING'
   | 'PREDATOR_EVASION'
   | 'COURTSHIP_DISPLAY'
+  | 'REPRODUCTIVE_SPAWNING'
   | 'SUBSTRATE_GRAZING'
   | 'RESTING_PERCH'
-  | 'BIOLUMINESCENT_BLOOM';
+  | 'BIOLUMINESCENT_BLOOM'
+  | 'HABITAT_MIGRATION'
+  | 'SCAVENGER_FEAST';
 
 export type AnticStatus = 'pending' | 'active' | 'completed' | 'interrupted';
 
@@ -41,6 +45,15 @@ export interface AnticStateEffect {
     familiarity: number;
     fear: number;
   };
+  reproductionOffspring?: {
+    parentAId: string;
+    parentBId: string;
+    species: string;
+  };
+  chainedAnticOpportunity?: {
+    nextType: AnticType;
+    delaySeconds: number;
+  };
 }
 
 export interface IAnticJSON {
@@ -54,8 +67,11 @@ export interface IAnticJSON {
   phases: string[];
   status: AnticStatus;
   salience: number;
+  significance: number;
   isManifest: boolean;
   location: { x: number; y: number; z: number };
+  chainedFromAnticId?: string;
+  causeEventId?: string;
 }
 
 export class Antic {
@@ -69,9 +85,13 @@ export class Antic {
   public phases: string[];
   public status: AnticStatus = 'pending';
   public salience: number = 0.5; // 0 (ambient background) to 1 (prominent spectacle)
+  public significance: number = 0.5; // ecological impact & observer importance
   public isManifest: boolean = false; // true if promoted to visible observer manifestation
   public location: Vector3D;
   public stateEffects: AnticStateEffect[] = [];
+  public chainedFromAnticId?: string;
+  public causeEventId?: string;
+  public scene?: AnticScene;
 
   constructor(config: {
     id?: string;
@@ -82,8 +102,11 @@ export class Antic {
     duration: number;
     phases: string[];
     salience?: number;
+    significance?: number;
     isManifest?: boolean;
     location: Vector3D;
+    chainedFromAnticId?: string;
+    causeEventId?: string;
   }) {
     this.id = config.id || 'antic_' + Math.random().toString(36).substring(2, 9);
     this.type = config.type;
@@ -93,8 +116,26 @@ export class Antic {
     this.duration = config.duration;
     this.phases = config.phases;
     this.salience = config.salience ?? 0.5;
+    this.significance = config.significance ?? 0.5;
     this.isManifest = config.isManifest ?? false;
     this.location = config.location.clone();
+    this.chainedFromAnticId = config.chainedFromAnticId;
+    this.causeEventId = config.causeEventId;
+  }
+
+  public generateScene(): AnticScene {
+    this.scene = AnticSceneFactory.createScene({
+      anticId: this.id,
+      type: this.type,
+      participants: this.participants,
+      spatialFocus: this.location,
+      startTime: this.startTime,
+      duration: this.duration,
+      eventContext: this.trigger,
+      significance: this.significance,
+      historicalEventId: this.causeEventId,
+    });
+    return this.scene;
   }
 
   public get currentPhase(): string {
@@ -142,8 +183,11 @@ export class Antic {
       phases: [...this.phases],
       status: this.status,
       salience: this.salience,
+      significance: this.significance,
       isManifest: this.isManifest,
       location: this.location.toJSON(),
+      chainedFromAnticId: this.chainedFromAnticId,
+      causeEventId: this.causeEventId,
     };
   }
 
@@ -157,8 +201,11 @@ export class Antic {
       duration: json.duration,
       phases: json.phases,
       salience: json.salience,
+      significance: json.significance ?? 0.5,
       isManifest: json.isManifest,
       location: Vector3D.fromJSON(json.location),
+      chainedFromAnticId: json.chainedFromAnticId,
+      causeEventId: json.causeEventId,
     });
     a.currentPhaseIndex = json.currentPhaseIndex;
     a.status = json.status;

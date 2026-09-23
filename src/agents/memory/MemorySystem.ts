@@ -101,14 +101,15 @@ export class MemorySystem {
     return this._memories.filter((m) => m.eventType === eventType);
   }
 
-  public getMostSalientMemory(): MemoryRecord | null {
-    if (this._memories.length === 0) return null;
-    let highest = this._memories[0];
-    for (let i = 1; i < this._memories.length; i++) {
-      const salience = Math.abs(this._memories[i].valence) * this._memories[i].strength;
+  public getMostSalientMemory(eventType?: string): MemoryRecord | null {
+    const list = eventType ? this.getMemoriesByType(eventType) : this._memories;
+    if (list.length === 0) return null;
+    let highest = list[0];
+    for (let i = 1; i < list.length; i++) {
+      const salience = Math.abs(list[i].valence) * list[i].strength;
       const highestSalience = Math.abs(highest.valence) * highest.strength;
       if (salience > highestSalience) {
-        highest = this._memories[i];
+        highest = list[i];
       }
     }
     return highest;

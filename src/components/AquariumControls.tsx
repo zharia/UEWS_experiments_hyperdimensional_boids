@@ -245,59 +245,96 @@ export const AquariumControls: React.FC<AquariumControlsProps> = ({
             </span>
             <div className="grid grid-cols-2 gap-1.5">
               <button
+                onClick={() => onSelectTool('inspect')}
+                className={`col-span-2 flex items-center justify-between p-2 rounded-xl border text-xs font-medium transition-all ${
+                  currentTool === 'inspect'
+                    ? 'bg-sky-950/80 text-sky-300 border-sky-500 shadow-[0_0_12px_rgba(56,189,248,0.25)]'
+                    : 'bg-slate-800/60 text-slate-300 border-slate-700 hover:bg-slate-800'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <MousePointer className="w-4 h-4 text-sky-400" />
+                  <span>Inspect & Focus Organism</span>
+                </div>
+                <kbd className="px-1.5 py-0.5 rounded bg-slate-900 text-sky-300 font-mono text-[10px] border border-slate-700">
+                  I
+                </kbd>
+              </button>
+
+              <button
                 onClick={() => onSelectTool('feed')}
-                className={`flex items-center gap-2 p-2 rounded-xl border text-xs font-medium transition-all ${
+                className={`flex items-center justify-between p-2 rounded-xl border text-xs font-medium transition-all ${
                   currentTool === 'feed'
                     ? 'bg-amber-950/80 text-amber-300 border-amber-600 shadow-sm'
                     : 'bg-slate-800/60 text-slate-300 border-slate-700 hover:bg-slate-800'
                 }`}
               >
-                <Cookie className="w-4 h-4 text-amber-400" />
-                <span>Feed Flakes</span>
+                <div className="flex items-center gap-2">
+                  <Cookie className="w-4 h-4 text-amber-400" />
+                  <span>Feed Flakes</span>
+                </div>
+                <kbd className="px-1 py-0.5 rounded bg-slate-900 text-slate-400 font-mono text-[9px]">
+                  F
+                </kbd>
               </button>
 
               <button
                 onClick={() => onSelectTool('wafer')}
-                className={`flex items-center gap-2 p-2 rounded-xl border text-xs font-medium transition-all ${
+                className={`flex items-center justify-between p-2 rounded-xl border text-xs font-medium transition-all ${
                   currentTool === 'wafer'
                     ? 'bg-amber-950/80 text-amber-300 border-amber-600 shadow-sm'
                     : 'bg-slate-800/60 text-slate-300 border-slate-700 hover:bg-slate-800'
                 }`}
               >
-                <CircleDot className="w-4 h-4 text-amber-400" />
-                <span>Crab Wafer</span>
+                <div className="flex items-center gap-2">
+                  <CircleDot className="w-4 h-4 text-amber-400" />
+                  <span>Crab Wafer</span>
+                </div>
+                <kbd className="px-1 py-0.5 rounded bg-slate-900 text-slate-400 font-mono text-[9px]">
+                  W
+                </kbd>
               </button>
 
               <button
                 onClick={() => onSelectTool('clean_glass')}
-                className={`flex items-center gap-2 p-2 rounded-xl border text-xs font-medium transition-all ${
+                className={`flex items-center justify-between p-2 rounded-xl border text-xs font-medium transition-all ${
                   currentTool === 'clean_glass'
                     ? 'bg-emerald-950/80 text-emerald-300 border-emerald-600 shadow-sm'
                     : 'bg-slate-800/60 text-slate-300 border-slate-700 hover:bg-slate-800'
                 }`}
               >
-                <Eraser className="w-4 h-4 text-emerald-400" />
-                <span>Clean Glass</span>
+                <div className="flex items-center gap-2">
+                  <Eraser className="w-4 h-4 text-emerald-400" />
+                  <span>Clean Glass</span>
+                </div>
+                <kbd className="px-1 py-0.5 rounded bg-slate-900 text-slate-400 font-mono text-[9px]">
+                  C
+                </kbd>
               </button>
 
               <button
                 onClick={() => onSelectTool('stir_water')}
-                className={`flex items-center gap-2 p-2 rounded-xl border text-xs font-medium transition-all ${
+                className={`flex items-center justify-between p-2 rounded-xl border text-xs font-medium transition-all ${
                   currentTool === 'stir_water'
                     ? 'bg-cyan-950/80 text-cyan-300 border-cyan-600 shadow-sm'
                     : 'bg-slate-800/60 text-slate-300 border-slate-700 hover:bg-slate-800'
                 }`}
               >
-                <Waves className="w-4 h-4 text-cyan-400" />
-                <span>Stir & Tap</span>
+                <div className="flex items-center gap-2">
+                  <Waves className="w-4 h-4 text-cyan-400" />
+                  <span>Stir & Tap</span>
+                </div>
+                <kbd className="px-1 py-0.5 rounded bg-slate-900 text-slate-400 font-mono text-[9px]">
+                  S
+                </kbd>
               </button>
             </div>
             <p className="text-[11px] text-slate-400 mt-1.5 italic">
+              {currentTool === 'inspect' && 'Click any fish, crab, snail, or shrimp to lock inspection and follow-cam.'}
               {currentTool === 'feed' && 'Click in the tank to drop sinking food flakes.'}
               {currentTool === 'wafer' && 'Click to drop substrate wafers for bottom-dwelling crabs.'}
               {currentTool === 'clean_glass' && 'Drag magnetic scrubber across the glass to scrape off algae.'}
               {currentTool === 'stir_water' && 'Click or drag to create currents; taps startle micro-fauna.'}
-              {currentTool === 'inspect' && 'Observe multi-scalar boid schooling and benthic micro-fauna.'}
             </p>
           </div>
 

@@ -23,11 +23,14 @@ export const FloraOverlay: React.FC<FloraOverlayProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [isCleaning, setIsCleaning] = useState(false);
   const [cleanerPos, setCleanerPos] = useState<{ x: number; y: number } | null>(null);
+  const [inspectorPos, setInspectorPos] = useState<{ x: number; y: number } | null>(null);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!sceneManager || !containerRef.current) return;
 
-    if (currentTool === 'feed') {
+    if (currentTool === 'inspect') {
+      sceneManager.raycastOrganism(e.clientX, e.clientY);
+    } else if (currentTool === 'feed') {
       sceneManager.dropFoodAtScreen(e.clientX, e.clientY);
     } else if (currentTool === 'wafer') {
       sceneManager.dropSubstrateWafer(e.clientX, e.clientY);
@@ -42,7 +45,9 @@ export const FloraOverlay: React.FC<FloraOverlayProps> = ({
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!sceneManager || !containerRef.current) return;
 
-    if (currentTool === 'clean_glass') {
+    if (currentTool === 'inspect') {
+      setInspectorPos({ x: e.clientX, y: e.clientY });
+    } else if (currentTool === 'clean_glass') {
       setCleanerPos({ x: e.clientX, y: e.clientY });
       if (isCleaning) {
         cleanAt(e.clientX, e.clientY);
@@ -59,6 +64,7 @@ export const FloraOverlay: React.FC<FloraOverlayProps> = ({
   const handlePointerLeave = () => {
     setIsCleaning(false);
     setCleanerPos(null);
+    setInspectorPos(null);
   };
 
   const cleanAt = (clientX: number, clientY: number) => {
@@ -79,7 +85,11 @@ export const FloraOverlay: React.FC<FloraOverlayProps> = ({
 
   const handleDoubleClick = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!sceneManager) return;
-    sceneManager.stirWaterAtScreen(e.clientX, e.clientY);
+    // On double click, if organism clicked, inspect it; otherwise stir water
+    const clickedOrg = sceneManager.raycastOrganism(e.clientX, e.clientY);
+    if (!clickedOrg) {
+      sceneManager.stirWaterAtScreen(e.clientX, e.clientY);
+    }
   };
 
   return (
@@ -93,6 +103,8 @@ export const FloraOverlay: React.FC<FloraOverlayProps> = ({
       className={`absolute inset-0 z-10 ${
         currentTool === 'clean_glass'
           ? 'cursor-none'
+          : currentTool === 'inspect'
+          ? 'cursor-crosshair'
           : currentTool === 'feed' || currentTool === 'wafer'
           ? 'cursor-crosshair'
           : currentTool === 'stir_water'
@@ -100,6 +112,23 @@ export const FloraOverlay: React.FC<FloraOverlayProps> = ({
           : 'cursor-default'
       }`}
     >
+      {/* Reticle indicator following cursor in inspect mode */}
+      {currentTool === 'inspect' && inspectorPos && (
+        <div
+          className="pointer-events-none fixed -translate-x-1/2 -translate-y-1/2 flex items-center justify-center transition-transform duration-75"
+          style={{ left: `${inspectorPos.x}px`, top: `${inspectorPos.y}px` }}
+        >
+          <div className="w-10 h-10 rounded-full border border-sky-400/60 flex items-center justify-center animate-pulse">
+            <div className="w-2 h-2 rounded-full bg-sky-400/80" />
+            <div className="absolute top-0 bottom-0 w-[1px] bg-sky-400/40" />
+            <div className="absolute left-0 right-0 h-[1px] bg-sky-400/40" />
+          </div>
+          <span className="absolute -bottom-5 text-[9px] font-mono uppercase tracking-widest text-sky-300 whitespace-nowrap bg-slate-950/80 px-1.5 py-0.2 rounded border border-sky-800/50">
+            Target Focus
+          </span>
+        </div>
+      )}
+
       {/* Magnetic Glass Cleaner puck indicator following cursor */}
       {currentTool === 'clean_glass' && cleanerPos && (
         <div

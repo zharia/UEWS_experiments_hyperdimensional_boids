@@ -43,9 +43,9 @@ export class DriveSystem {
     this.registerDrive('socialisation', { accumulationRate: 0.025, decayRate: 0.05, urgencyThreshold: 0.60 });
     this.registerDrive('territoriality', { accumulationRate: 0.01, decayRate: 0.04, urgencyThreshold: 0.60 });
 
-    // Initial randomized baselines
+    // Initial baselines (low fear baseline)
     for (const [key] of this._configs) {
-      this._drives.set(key, Math.random() * 0.35);
+      this._drives.set(key, key === 'fear' ? 0.05 : 0.15);
     }
   }
 

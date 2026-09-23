@@ -241,6 +241,7 @@ export class AnticCandidateGenerator {
         duration: 6.5,
         phases: ['initial_glow', 'kuramoto_entrainment', 'bloom_pulse', 'decay_glow'],
         salience: 0.85,
+        significance: 0.7,
         location: new Vector3D(0, 0, 0),
       });
 
@@ -250,6 +251,134 @@ export class AnticCandidateGenerator {
         urgency: 0.7,
         initiatorId: availableAgents[0].id,
       });
+    }
+
+    // 7. COURTSHIP_DISPLAY & REPRODUCTIVE_SPAWNING Candidates
+    for (let i = 0; i < availableAgents.length; i++) {
+      const a1 = availableAgents[i];
+      if (!a1.canReproduce(simTime)) continue;
+
+      for (let j = i + 1; j < availableAgents.length; j++) {
+        const a2 = availableAgents[j];
+        if (a2.species !== a1.species) continue;
+        if (!a2.canReproduce(simTime)) continue;
+
+        const dist = a1.position.distanceTo(a2.position);
+        if (dist < 6.0) {
+          const rel = a1.relationships.getRelationship(a2.id);
+          const sp = a1.speciesTraits;
+          if (rel.affinity >= sp.traits.reproduction.minPartnerAffinity) {
+            const antic = new Antic({
+              type: 'COURTSHIP_DISPLAY',
+              participants: [
+                { agentId: a1.id, role: 'initiator' },
+                { agentId: a2.id, role: 'partner' },
+              ],
+              trigger: `Mutual courtship affinity between mature ${a1.species} peers`,
+              startTime: simTime,
+              duration: 7.5,
+              phases: ['approach', 'parallel_glide', 'nuptial_dance', 'synchrony', 'commitment'],
+              salience: 0.88,
+              significance: 0.85,
+              location: a1.position.clone().add(a2.position).multiplyScalar(0.5),
+            });
+
+            // Courtship strengthens bonds and chains into spawning!
+            antic.stateEffects.push({
+              agentId: a1.id,
+              relationshipDelta: { targetId: a2.id, affinity: 0.35, familiarity: 0.5, fear: 0 },
+              memoryCreated: { eventType: 'courtship_success', valence: 0.9, strength: 1.0 },
+              chainedAnticOpportunity: { nextType: 'REPRODUCTIVE_SPAWNING', delaySeconds: 0.5 },
+            });
+            antic.stateEffects.push({
+              agentId: a2.id,
+              relationshipDelta: { targetId: a1.id, affinity: 0.35, familiarity: 0.5, fear: 0 },
+              memoryCreated: { eventType: 'courtship_success', valence: 0.9, strength: 1.0 },
+            });
+
+            candidates.push({
+              antic,
+              baseScore: 1.8 + rel.affinity * 0.8,
+              urgency: 0.85,
+              initiatorId: a1.id,
+            });
+            break;
+          }
+        }
+      }
+    }
+
+    // 8. SCAVENGER_FEAST Candidates (hermit crabs, snails on detritus)
+    const detritusList = resources.filter((r) => r.type === 'detritus' && r.quantity > 0.1);
+    for (const det of detritusList) {
+      const scavengers = availableAgents.filter((a) => {
+        const foodTypes = a.speciesTraits.traits.resourceRequirements.preferredFoodTypes;
+        return foodTypes.includes('detritus') && a.position.distanceTo(det.position) < 8.0;
+      });
+
+      if (scavengers.length > 0) {
+        const leadScavenger = scavengers[0];
+        const antic = new Antic({
+          type: 'SCAVENGER_FEAST',
+          participants: scavengers.slice(0, 3).map((a, idx) => ({
+            agentId: a.id,
+            role: idx === 0 ? 'initiator' : 'competitor',
+          })),
+          trigger: `Organic detritus biomass discovered on substrate floor`,
+          startTime: simTime,
+          duration: 6.0,
+          phases: ['converge', 'graze', 'process_sediment', 'satiate'],
+          salience: 0.65,
+          significance: 0.6,
+          location: det.position,
+        });
+
+        for (const s of scavengers.slice(0, 3)) {
+          antic.stateEffects.push({
+            agentId: s.id,
+            driveModifications: { hunger: -0.5 },
+            energyDelta: 20.0,
+            memoryCreated: { eventType: 'detritus_scavenged', valence: 0.7, strength: 0.8 },
+          });
+        }
+
+        candidates.push({
+          antic,
+          baseScore: 1.5,
+          urgency: 0.8,
+          initiatorId: leadScavenger.id,
+        });
+      }
+    }
+
+    // 9. HABITAT_MIGRATION Candidates
+    for (const agent of availableAgents) {
+      if (agent.behaviour.currentBehaviour.type === 'migrate' && agent.behaviour.currentBehaviour.targetPosition) {
+        const antic = new Antic({
+          type: 'HABITAT_MIGRATION',
+          participants: [{ agentId: agent.id, role: 'initiator' }],
+          trigger: `Agent initiated migration toward favorable ecological niche`,
+          startTime: simTime,
+          duration: 7.0,
+          phases: ['depart', 'transit_corridor', 'arrive_boundary', 'settle'],
+          salience: 0.6,
+          significance: 0.65,
+          location: agent.position,
+        });
+
+        antic.stateEffects.push({
+          agentId: agent.id,
+          driveModifications: { exploration: -0.4 },
+          memoryCreated: { eventType: 'niche_settled', valence: 0.6, strength: 0.7 },
+        });
+
+        candidates.push({
+          antic,
+          baseScore: 1.3,
+          urgency: 0.6,
+          initiatorId: agent.id,
+        });
+      }
     }
 
     return candidates;

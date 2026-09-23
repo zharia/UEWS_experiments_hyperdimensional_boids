@@ -4,12 +4,12 @@
  * Provides real-time visibility into the underlying multi-scalar artificial ecology:
  *  - Ecological Phase & State Transitions
  *  - Multi-scalar Simulation Clock Controls
- *  - Active Episodic Antics & Progress
- *  - Recent Antic History & Repetition Penalties
- *  - Live Antic Candidates Queue
- *  - Deep Agent Inspector (Drives, Episodic Memory, Social Relationships, Selected Behaviour)
+ *  - Populations, Demographics & Habitat Niche Allocations
+ *  - Authoritative Causal Ecological Event Ledger with historical trace
+ *  - Active Episodic Antics & Manifested Antic Scenes
+ *  - Deep Agent Inspector (Drives, Episodic Memory, Social Relationships, Selected Behaviour, Lifecycle)
  *  - Environmental Field Summary (Nutrients, Temperature, Oxygen, Illumination)
- *  - Versioned World State Persistence (Save/Load/Reset)
+ *  - Versioned World State Persistence (v0.2 Save/Load/Reset with idle-time simulation)
  */
 
 import React, { useState } from 'react';
@@ -20,7 +20,6 @@ import {
   FastForward,
   Save,
   RotateCcw,
-  Download,
   Upload,
   Brain,
   Layers,
@@ -33,6 +32,10 @@ import {
   Activity,
   ChevronRight,
   Database,
+  Users,
+  ScrollText,
+  GitBranch,
+  MapPin,
 } from 'lucide-react';
 import { EcologySimulation } from '../simulation/EcologySimulation';
 import { EcologicalAgent } from '../agents/agent/EcologicalAgent';
@@ -49,24 +52,27 @@ export const EcosystemInspectorModal: React.FC<EcosystemInspectorModalProps> = (
   onClose,
   ecologySim,
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'antics' | 'agents' | 'fields' | 'persistence'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'populations' | 'history' | 'antics' | 'agents' | 'fields' | 'persistence'>('overview');
   const [selectedAgentId, setSelectedAgentId] = useState<string>(ecologySim.agents[0]?.id || '');
   const [persistenceFeedback, setPersistenceFeedback] = useState<string>('');
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const telemetry = ecologySim.getTelemetry();
   const selectedAgent = ecologySim.agents.find((a) => a.id === selectedAgentId) || ecologySim.agents[0];
+  const allEvents = ecologySim.eventLedger.getAllEvents().slice(-50).reverse();
+  const causalChain = selectedEventId ? ecologySim.eventLedger.traceCausalChain(selectedEventId) : [];
 
   const handleSave = async () => {
     const success = await ecologySim.save();
-    setPersistenceFeedback(success ? 'World state saved successfully (v0.1)!' : 'Failed to save world state.');
+    setPersistenceFeedback(success ? 'World state saved successfully (v0.2 with Populations, Habitats, & Ledger)!' : 'Failed to save world state.');
     setTimeout(() => setPersistenceFeedback(''), 3500);
   };
 
   const handleLoad = async () => {
     const success = await ecologySim.load();
-    setPersistenceFeedback(success ? 'World state restored successfully (v0.1)!' : 'No saved world found.');
+    setPersistenceFeedback(success ? 'World state restored successfully (v0.2)!' : 'No saved world found.');
     setTimeout(() => setPersistenceFeedback(''), 3500);
   };
 
@@ -94,7 +100,7 @@ export const EcosystemInspectorModal: React.FC<EcosystemInspectorModalProps> = (
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md">
-      <div className="flex flex-col w-full max-w-5xl h-[85vh] bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden text-slate-200">
+      <div className="flex flex-col w-full max-w-5xl h-[88vh] bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden text-slate-200">
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/60">
           <div className="flex items-center gap-3">
@@ -103,7 +109,7 @@ export const EcosystemInspectorModal: React.FC<EcosystemInspectorModalProps> = (
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-semibold tracking-wide text-white">Ecosystem Intelligence Inspector</h2>
+                <h2 className="text-lg font-semibold tracking-wide text-white">Ecosystem Dynamics & Causal Ledger</h2>
                 <span className={`px-2.5 py-0.5 text-xs font-mono font-medium rounded-full border ${getPhaseColor(telemetry.currentPhase)}`}>
                   {telemetry.currentPhase}
                 </span>
@@ -112,7 +118,7 @@ export const EcosystemInspectorModal: React.FC<EcosystemInspectorModalProps> = (
                 </span>
               </div>
               <p className="text-xs text-slate-400 font-mono">
-                Sim Time: {telemetry.simulationTime.toFixed(1)}s (Epoch duration: {telemetry.phaseDurationSeconds.toFixed(1)}s)
+                Sim Time: {telemetry.simulationTime.toFixed(1)}s (Epoch duration: {telemetry.phaseDurationSeconds.toFixed(1)}s) | {telemetry.agentCount} Organisms
               </p>
             </div>
           </div>
@@ -152,10 +158,12 @@ export const EcosystemInspectorModal: React.FC<EcosystemInspectorModalProps> = (
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex px-6 border-b border-slate-800 bg-slate-900/50">
+        <div className="flex px-6 border-b border-slate-800 bg-slate-900/50 overflow-x-auto">
           {[
             { id: 'overview', label: 'Ecology Overview', icon: Layers },
-            { id: 'antics', label: `Episodic Antics (${telemetry.activeAntics.length})`, icon: Sparkles },
+            { id: 'populations', label: `Populations & Habitats`, icon: Users },
+            { id: 'history', label: `Causal Ledger (${allEvents.length})`, icon: ScrollText },
+            { id: 'antics', label: `Antics & Scenes (${telemetry.activeAntics.length})`, icon: Sparkles },
             { id: 'agents', label: `Agent Cognition (${ecologySim.agents.length})`, icon: Brain },
             { id: 'fields', label: 'Environmental Fields', icon: Compass },
             { id: 'persistence', label: 'World Persistence', icon: Database },
@@ -166,7 +174,7 @@ export const EcosystemInspectorModal: React.FC<EcosystemInspectorModalProps> = (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
                   active
                     ? 'border-teal-400 text-teal-300 bg-teal-950/20'
                     : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
@@ -210,12 +218,12 @@ export const EcosystemInspectorModal: React.FC<EcosystemInspectorModalProps> = (
                 </div>
 
                 <div className="p-4 rounded-xl bg-slate-800/60 border border-slate-700/60">
-                  <div className="text-xs text-slate-400 font-medium">Dominant Motivation</div>
-                  <div className="text-lg font-mono font-semibold text-sky-300 mt-2">
-                    {telemetry.averageCuriosity > telemetry.averageHunger ? 'Curiosity' : 'Hunger'}
+                  <div className="text-xs text-slate-400 font-medium">Demographics</div>
+                  <div className="text-sm font-mono font-semibold text-sky-300 mt-2">
+                    J: {telemetry.demographics?.juvenileCount || 0} | M: {telemetry.demographics?.matureCount || 0} | S: {telemetry.demographics?.senescentCount || 0}
                   </div>
                   <div className="text-xs text-slate-400 font-mono">
-                    H: {(telemetry.averageHunger * 100).toFixed(0)}% | C: {(telemetry.averageCuriosity * 100).toFixed(0)}%
+                    Births: {telemetry.demographics?.birthCount || 0}
                   </div>
                 </div>
               </div>
@@ -252,32 +260,219 @@ export const EcosystemInspectorModal: React.FC<EcosystemInspectorModalProps> = (
                 </div>
               </div>
 
-              {/* Active Antics Snapshot */}
+              {/* Habitats Summary */}
               <div className="p-5 rounded-xl bg-slate-950/70 border border-slate-800">
                 <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300 mb-3">
-                  Currently Manifest Episodic Antics
+                  Spatial Habitat Occupancy & Partitioning
                 </h3>
-                {telemetry.activeAntics.length === 0 ? (
-                  <div className="text-xs text-slate-400 italic py-3 text-center">
-                    Ambient equilibrium cruising. No multi-agent antics currently triggered.
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {ecologySim.habitats.getAllHabitats().map((h) => (
+                    <div key={h.id} className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-teal-300">{h.name}</span>
+                        <span className="text-xs font-mono text-slate-400">{h.occupantCount}/{h.capacity}</span>
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-1">Zone: {h.type}</div>
+                      <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                        <div
+                          className="bg-emerald-500 h-full rounded-full transition-all"
+                          style={{ width: `${Math.min(100, (h.occupantCount / Math.max(1, h.capacity)) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'populations' && (
+            <div className="space-y-6">
+              {/* Demographics Overview */}
+              <div className="p-5 rounded-xl bg-slate-950/70 border border-slate-800">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300 mb-3">
+                  Ecology Demographics & Cohort Lifecycles
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                    <div className="text-xs text-slate-400">Births / Neonates</div>
+                    <div className="text-xl font-mono text-pink-400 font-bold">{telemetry.demographics?.birthCount || 0}</div>
                   </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {telemetry.activeAntics.map((antic) => (
-                      <div key={antic.id} className="p-3 rounded-lg bg-slate-900 border border-slate-800">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-mono font-semibold text-teal-300">{antic.type}</span>
-                          <span className="text-xs font-mono text-slate-400">Phase: {antic.phase}</span>
+                  <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                    <div className="text-xs text-slate-400">Juveniles</div>
+                    <div className="text-xl font-mono text-amber-400 font-bold">{telemetry.demographics?.juvenileCount || 0}</div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                    <div className="text-xs text-slate-400">Mature Adults</div>
+                    <div className="text-xl font-mono text-emerald-400 font-bold">{telemetry.demographics?.matureCount || 0}</div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                    <div className="text-xs text-slate-400">Senescent Elders</div>
+                    <div className="text-xl font-mono text-purple-400 font-bold">{telemetry.demographics?.senescentCount || 0}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Species Carrying Capacities & Rates */}
+              <div className="p-5 rounded-xl bg-slate-950/70 border border-slate-800">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300 mb-3">
+                  Species Populations, Carrying Capacity, & Biomass
+                </h3>
+                <div className="space-y-3">
+                  {ecologySim.populations.getAllPopulations().map((pop) => {
+                    const ratio = pop.carryingCapacity > 0 ? (pop.count / pop.carryingCapacity) : 0;
+                    return (
+                      <div key={pop.species} className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                        <div className="flex items-center justify-between text-xs font-mono">
+                          <span className="font-semibold text-teal-300">{pop.species}</span>
+                          <span className="text-slate-400">
+                            Count: {pop.count} | Cap: {pop.carryingCapacity} | Biomass: {pop.totalBiomass.toFixed(1)}
+                          </span>
                         </div>
-                        <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                        <div className="w-full bg-slate-800 h-2 rounded-full mt-2 overflow-hidden">
                           <div
-                            className="bg-teal-500 h-full rounded-full transition-all duration-300"
-                            style={{ width: `${Math.min(100, Math.max(5, antic.progress * 100))}%` }}
+                            className={`h-full rounded-full transition-all ${ratio > 0.8 ? 'bg-amber-500' : 'bg-teal-500'}`}
+                            style={{ width: `${Math.min(100, ratio * 100)}%` }}
                           />
+                        </div>
+                        <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 mt-1">
+                          <span>Births: {pop.birthsTotal} (Rate: {(pop.birthRate * 60).toFixed(1)}/min)</span>
+                          <span>Deaths: {pop.deathsTotal} (Rate: {(pop.mortalityRate * 60).toFixed(1)}/min)</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Habitats Detail */}
+              <div className="p-5 rounded-xl bg-slate-950/70 border border-slate-800">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300 mb-3">
+                  Habitat Niches & Environmental Profiles
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {ecologySim.habitats.getAllHabitats().map((h) => (
+                    <div key={h.id} className="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-semibold text-white flex items-center gap-2">
+                          <MapPin className="w-4 h-4 text-emerald-400" />
+                          {h.name}
+                        </h4>
+                        <span className="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                          {h.occupantCount} residents
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1">{h.description}</p>
+                      <div className="grid grid-cols-3 gap-2 text-xs font-mono mt-3 p-2 bg-slate-950 rounded border border-slate-800/60">
+                        <div>
+                          <div className="text-[10px] text-slate-400">Nutrients</div>
+                          <div className="text-emerald-400 font-bold">{h.profile.nutrients.toFixed(2)}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-slate-400">Oxygen</div>
+                          <div className="text-sky-400 font-bold">{h.profile.dissolvedOxygen.toFixed(2)}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-slate-400">Light</div>
+                          <div className="text-amber-400 font-bold">{h.profile.lightLevel.toFixed(2)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'history' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between p-4 rounded-xl bg-slate-950/70 border border-slate-800">
+                <div>
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300">
+                    Authoritative Ecological Event Ledger
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Causally coupled event ledger recording vital demographic, trophic, and behavioral milestones. Click any event to trace its causal origin chain.
+                  </p>
+                </div>
+                {selectedEventId && (
+                  <button
+                    onClick={() => setSelectedEventId(null)}
+                    className="px-3 py-1.5 text-xs font-mono bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors"
+                  >
+                    Clear Causal Trace
+                  </button>
+                )}
+              </div>
+
+              {/* Causal Chain Trace Panel */}
+              {selectedEventId && causalChain.length > 0 && (
+                <div className="p-4 rounded-xl bg-teal-950/30 border border-teal-800/60">
+                  <div className="flex items-center gap-2 text-xs font-mono font-semibold text-teal-300 mb-2">
+                    <GitBranch className="w-4 h-4" />
+                    Causal Historical Chain ({causalChain.length} steps):
+                  </div>
+                  <div className="space-y-2">
+                    {causalChain.map((evt, idx) => (
+                      <div key={evt.id} className="flex items-start gap-3 p-2.5 rounded bg-slate-900/90 border border-teal-800/40 text-xs font-mono">
+                        <span className="px-2 py-0.5 rounded bg-teal-900/60 text-teal-300 font-bold">Step {idx + 1}</span>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-white">[{evt.eventType}] {evt.description}</span>
+                            <span className="text-slate-400">T+{evt.timestamp.toFixed(1)}s</span>
+                          </div>
+                          {evt.cause && (
+                            <div className="text-[11px] text-amber-300/90 mt-1">
+                              Cause: {evt.cause.description}
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Event Ledger Stream */}
+              <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                {allEvents.length === 0 ? (
+                  <div className="text-xs text-slate-400 italic py-6 text-center">No events recorded in ledger yet.</div>
+                ) : (
+                  allEvents.map((evt) => (
+                    <div
+                      key={evt.id}
+                      onClick={() => setSelectedEventId(evt.id)}
+                      className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                        selectedEventId === evt.id
+                          ? 'bg-teal-950/50 border-teal-500'
+                          : 'bg-slate-900 hover:bg-slate-850 border-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-xs font-mono">
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            evt.eventType === 'REPRODUCTION' || evt.eventType === 'BIRTH' ? 'bg-pink-950 text-pink-300 border border-pink-800' :
+                            evt.eventType === 'DEATH' ? 'bg-rose-950 text-rose-300 border border-rose-800' :
+                            evt.eventType === 'FEEDING' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
+                            evt.eventType === 'ANTIC_MANIFESTED' ? 'bg-purple-950 text-purple-300 border border-purple-800' :
+                            'bg-slate-800 text-slate-300'
+                          }`}>
+                            {evt.eventType}
+                          </span>
+                          <span className="text-slate-300 font-medium">{evt.description}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-slate-400">
+                          <span>Sig: {(evt.significance * 100).toFixed(0)}%</span>
+                          <span>T+{evt.timestamp.toFixed(1)}s</span>
+                        </div>
+                      </div>
+                      {evt.cause && (
+                        <div className="text-[11px] font-mono text-slate-400 mt-1 pl-2 border-l border-slate-700">
+                          Reason: {evt.cause.description}
+                        </div>
+                      )}
+                    </div>
+                  ))
                 )}
               </div>
             </div>
@@ -285,45 +480,29 @@ export const EcosystemInspectorModal: React.FC<EcosystemInspectorModalProps> = (
 
           {activeTab === 'antics' && (
             <div className="space-y-6">
-              {/* Active Antics Detailed */}
-              <div>
-                <h3 className="text-xs font-mono uppercase tracking-wider text-slate-400 mb-3">Active Antics ({ecologySim.anticScheduler.activeAntics.length})</h3>
-                {ecologySim.anticScheduler.activeAntics.length === 0 ? (
-                  <div className="text-xs text-slate-400 italic p-4 rounded-xl bg-slate-950/50 border border-slate-800 text-center">
-                    No active antics currently executing.
+              {/* Manifest Scenes representation */}
+              <div className="p-5 rounded-xl bg-slate-950/70 border border-slate-800">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300 mb-3">
+                  Manifested Antic Scenes ({ecologySim.anticScheduler.activeScenes.length})
+                </h3>
+                {ecologySim.anticScheduler.activeScenes.length === 0 ? (
+                  <div className="text-xs text-slate-400 italic py-3 text-center">
+                    No scenes actively manifested for observation.
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    {ecologySim.anticScheduler.activeAntics.map((antic) => (
-                      <div key={antic.id} className="p-4 rounded-xl bg-slate-950/80 border border-slate-800">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-mono font-bold text-teal-300">{antic.type}</span>
-                            <span className={`px-2 py-0.5 text-xs font-mono rounded ${antic.isManifest ? 'bg-amber-950 text-amber-300 border border-amber-800' : 'bg-slate-800 text-slate-400'}`}>
-                              {antic.isManifest ? 'MANIFEST (Observable)' : 'LATENT (Subconscious)'}
-                            </span>
-                          </div>
-                          <span className="text-xs font-mono text-slate-400">
-                            Duration: {antic.duration.toFixed(1)}s (Salience: {antic.salience.toFixed(2)})
-                          </span>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {ecologySim.anticScheduler.activeScenes.map((scene) => (
+                      <div key={scene.id} className="p-4 rounded-xl bg-slate-900 border border-teal-800/60">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-mono font-bold text-teal-300">{scene.type}</span>
+                          <span className="text-xs font-mono text-emerald-400">Sig: {(scene.significance * 100).toFixed(0)}%</span>
                         </div>
-                        <p className="text-xs text-slate-400 mb-3">{antic.trigger}</p>
-                        <div className="flex items-center gap-2 text-xs font-mono text-slate-300">
-                          <span className="text-slate-400">Phase Sequence:</span>
-                          {antic.phases.map((ph, idx) => (
-                            <span
-                              key={idx}
-                              className={`px-2 py-0.5 rounded ${
-                                idx === antic.currentPhaseIndex
-                                  ? 'bg-teal-700 text-white font-bold'
-                                  : idx < antic.currentPhaseIndex
-                                  ? 'bg-slate-800 text-slate-400 line-through'
-                                  : 'bg-slate-900 text-slate-400'
-                              }`}
-                            >
-                              {ph}
-                            </span>
-                          ))}
+                        <p className="text-xs text-slate-300 mt-2">{scene.eventContext}</p>
+                        <div className="text-[11px] font-mono text-slate-400 mt-2">
+                          Focus: ({scene.spatialFocus.x.toFixed(1)}, {scene.spatialFocus.y.toFixed(1)}, {scene.spatialFocus.z.toFixed(1)}) | Radius: {scene.spatialRadius.toFixed(1)}m
+                        </div>
+                        <div className="text-[11px] font-mono text-slate-400 mt-1">
+                          Participants: {scene.participants.map((p) => `${p.agentId} (${p.role})`).join(', ')}
                         </div>
                       </div>
                     ))}
@@ -331,20 +510,53 @@ export const EcosystemInspectorModal: React.FC<EcosystemInspectorModalProps> = (
                 )}
               </div>
 
-              {/* Recent Antic History & Repetition Suppression */}
-              <div>
-                <h3 className="text-xs font-mono uppercase tracking-wider text-slate-400 mb-3">Recent Antic History & Repetition Suppression</h3>
-                <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2">
-                  {ecologySim.anticHistory.getRecentAntics(6).map((rec, i) => (
-                    <div key={i} className="flex items-center justify-between text-xs font-mono p-2 rounded bg-slate-900 border border-slate-800/80">
-                      <div className="flex items-center gap-2">
-                        <span className="text-teal-400">T+{rec.startTime.toFixed(1)}s</span>
-                        <span className="text-slate-200 font-semibold">{rec.type}</span>
-                        <span className="text-slate-400">({rec.outcome})</span>
+              {/* Active Antics Details */}
+              <div className="p-5 rounded-xl bg-slate-950/70 border border-slate-800">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300 mb-3">
+                  Active Antics & Execution States
+                </h3>
+                {telemetry.activeAntics.length === 0 ? (
+                  <div className="text-xs text-slate-400 italic py-3 text-center">
+                    No multi-agent antics currently scheduled.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {ecologySim.anticScheduler.activeAntics.map((antic) => (
+                      <div key={antic.id} className="p-4 rounded-lg bg-slate-900 border border-slate-800">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono font-bold text-teal-300">{antic.type}</span>
+                            <span className="px-2 py-0.5 text-[10px] font-mono rounded bg-slate-800 text-slate-300">
+                              Phase: {antic.currentPhase}
+                            </span>
+                            {antic.isManifest && (
+                              <span className="px-2 py-0.5 text-[10px] font-mono rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+                                Manifest
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs font-mono text-slate-400">
+                            Progress: {(antic.progress * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-2">{antic.trigger}</p>
                       </div>
-                      <span className="text-xs text-amber-400/80">
-                        Cooldown Penalty: {(ecologySim.anticHistory.getRepetitionPenalty(rec.type, ecologySim.clock.simulationTime) * 100).toFixed(0)}%
-                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Recent History */}
+              <div className="p-5 rounded-xl bg-slate-950/70 border border-slate-800">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300 mb-3">
+                  Recent Antics History (Repetition Suppression Filter)
+                </h3>
+                <div className="space-y-2">
+                  {ecologySim.anticHistory.getRecentAntics(6).map((rec, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs font-mono p-2.5 rounded bg-slate-900 border border-slate-800">
+                      <span className="text-slate-300 font-semibold">{rec.type}</span>
+                      <span className="text-slate-400">{rec.outcome}</span>
+                      <span className="text-teal-400">T+{rec.startTime.toFixed(1)}s</span>
                     </div>
                   ))}
                 </div>
@@ -354,159 +566,156 @@ export const EcosystemInspectorModal: React.FC<EcosystemInspectorModalProps> = (
 
           {activeTab === 'agents' && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Agent Selector List */}
-              <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2">
-                <div className="text-xs font-mono uppercase tracking-wider text-slate-400 mb-2">Agent Roster ({ecologySim.agents.length})</div>
-                <div className="space-y-1.5 max-h-[55vh] overflow-y-auto pr-1">
-                  {ecologySim.agents.map((a) => (
-                    <button
-                      key={a.id}
-                      onClick={() => setSelectedAgentId(a.id)}
-                      className={`w-full text-left p-2.5 rounded-lg text-xs font-mono flex items-center justify-between transition-colors ${
-                        selectedAgent?.id === a.id
-                          ? 'bg-teal-900/60 border border-teal-700/80 text-teal-200'
-                          : 'bg-slate-900/80 hover:bg-slate-800 border border-slate-800 text-slate-300'
-                      }`}
-                    >
-                      <div>
-                        <div className="font-semibold">{a.id}</div>
-                        <div className="text-[10px] text-slate-400">{a.species} ({a.lifecycle})</div>
-                      </div>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
-                        {a.behaviour.currentBehaviour.type}
-                      </span>
-                    </button>
-                  ))}
+              {/* Agent List */}
+              <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2 max-h-[600px] overflow-y-auto">
+                <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">
+                  Select Autonomous Agent
                 </div>
+                {ecologySim.agents.map((ag) => (
+                  <button
+                    key={ag.id}
+                    onClick={() => setSelectedAgentId(ag.id)}
+                    className={`w-full flex items-center justify-between p-3 rounded-lg text-left transition-colors font-mono text-xs ${
+                      selectedAgent?.id === ag.id
+                        ? 'bg-teal-900/40 border border-teal-500 text-teal-200'
+                        : 'bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300'
+                    }`}
+                  >
+                    <div>
+                      <div className="font-semibold">{ag.id}</div>
+                      <div className="text-[11px] text-slate-400">{ag.species} ({ag.lifecycle})</div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-500" />
+                  </button>
+                ))}
               </div>
 
-              {/* Selected Agent Cognition & Internal State */}
-              <div className="md:col-span-2 space-y-4">
-                {selectedAgent && (
-                  <div className="p-5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-4">
-                    {/* Header Details */}
-                    <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              {/* Agent Details */}
+              {selectedAgent && (
+                <div className="md:col-span-2 space-y-4">
+                  {/* Status header */}
+                  <div className="p-5 rounded-xl bg-slate-950/70 border border-slate-800">
+                    <div className="flex items-center justify-between">
                       <div>
-                        <h4 className="text-base font-mono font-bold text-white">{selectedAgent.id}</h4>
+                        <h3 className="text-base font-bold text-white font-mono">{selectedAgent.id}</h3>
                         <p className="text-xs text-slate-400 font-mono">
-                          Species: {selectedAgent.species} | Stage: {selectedAgent.lifecycle} | Age: {selectedAgent.ageSeconds.toFixed(1)}s
+                          Species: {selectedAgent.species} | Lifecycle: {selectedAgent.lifecycle} | Gen: {selectedAgent.generation} | Habitat: {selectedAgent.currentHabitatId || 'Open Column'}
                         </p>
                       </div>
                       <div className="text-right">
-                        <div className="text-xs font-mono text-slate-400">Energy</div>
-                        <div className="text-lg font-mono font-bold text-emerald-400">
-                          {selectedAgent.energy.toFixed(1)}%
-                        </div>
+                        <div className="text-sm font-mono text-emerald-400 font-bold">{selectedAgent.energy.toFixed(1)}% Energy</div>
+                        <div className="text-xs font-mono text-sky-400">Health: {selectedAgent.health.toFixed(1)}%</div>
                       </div>
                     </div>
 
-                    {/* Active Behaviour & Locomotion Intent */}
-                    <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
-                      <div className="flex items-center justify-between text-xs font-mono">
-                        <span className="text-teal-300 font-semibold">Active Behaviour: {selectedAgent.behaviour.currentBehaviour.type}</span>
-                        <span className="text-slate-400">Speed Mult: {selectedAgent.behaviour.currentBehaviour.desiredSpeedMultiplier}x</span>
+                    {/* Current Behavior */}
+                    <div className="mt-4 p-3 rounded-lg bg-slate-900 border border-slate-800">
+                      <div className="text-xs font-mono text-slate-400">Active Behavioural Mode:</div>
+                      <div className="text-sm font-mono font-semibold text-teal-300 mt-1">
+                        [{selectedAgent.behaviour.currentBehaviour.type.toUpperCase()}] {selectedAgent.behaviour.currentBehaviour.reason}
                       </div>
-                      <p className="text-xs text-slate-400 mt-1">{selectedAgent.behaviour.currentBehaviour.reason}</p>
-                    </div>
-
-                    {/* Internal Drives Gauges */}
-                    <div>
-                      <div className="text-xs font-mono uppercase tracking-wider text-slate-400 mb-2">Motivational Drives</div>
-                      <div className="grid grid-cols-2 gap-2">
-                        {['hunger', 'fear', 'curiosity', 'rest', 'exploration', 'socialisation', 'territoriality'].map((d) => {
-                          const val = selectedAgent.drives.get(d);
-                          return (
-                            <div key={d} className="p-2 rounded bg-slate-900 border border-slate-800">
-                              <div className="flex justify-between text-[11px] font-mono mb-1">
-                                <span className="capitalize text-slate-300">{d}</span>
-                                <span className="text-teal-400">{(val * 100).toFixed(0)}%</span>
-                              </div>
-                              <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                                <div className="bg-teal-500 h-full rounded-full" style={{ width: `${val * 100}%` }} />
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Episodic Memory */}
-                    <div>
-                      <div className="text-xs font-mono uppercase tracking-wider text-slate-400 mb-2">Episodic Memories ({selectedAgent.memory.count})</div>
-                      {selectedAgent.memory.count === 0 ? (
-                        <div className="text-xs text-slate-400 italic">No episodic memories recorded yet.</div>
-                      ) : (
-                        <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
-                          {selectedAgent.memory.getAllMemories().map((m) => (
-                            <div key={m.id} className="text-xs font-mono p-2 rounded bg-slate-900 border border-slate-800 flex justify-between">
-                              <span className="text-slate-300">{m.eventType}</span>
-                              <span className="text-slate-400">Valence: {m.valence > 0 ? `+${m.valence.toFixed(2)}` : m.valence.toFixed(2)} | Strength: {(m.strength * 100).toFixed(0)}%</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Relationships */}
-                    <div>
-                      <div className="text-xs font-mono uppercase tracking-wider text-slate-400 mb-2">Inter-agent Social Relationships</div>
-                      {selectedAgent.relationships.getAllRelationships().length === 0 ? (
-                        <div className="text-xs text-slate-400 italic">No interpersonal ties recorded yet.</div>
-                      ) : (
-                        <div className="grid grid-cols-2 gap-2">
-                          {selectedAgent.relationships.getAllRelationships().slice(0, 4).map((rel) => (
-                            <div key={rel.targetAgentId} className="p-2 rounded bg-slate-900 border border-slate-800 text-xs font-mono">
-                              <div className="font-semibold text-slate-200">{rel.targetAgentId}</div>
-                              <div className="text-slate-400 text-[10px]">
-                                Affinity: {rel.affinity.toFixed(2)} | Familiarity: {(rel.familiarity * 100).toFixed(0)}%
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   </div>
-                )}
-              </div>
+
+                  {/* Drives & Motivations */}
+                  <div className="p-5 rounded-xl bg-slate-950/70 border border-slate-800">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-300 mb-3">
+                      Internal Drive Motivations
+                    </h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        { label: 'Hunger', val: selectedAgent.drives.get('hunger'), color: 'bg-amber-500' },
+                        { label: 'Fear', val: selectedAgent.drives.get('fear'), color: 'bg-rose-500' },
+                        { label: 'Curiosity', val: selectedAgent.drives.get('curiosity'), color: 'bg-teal-500' },
+                        { label: 'Socialisation', val: selectedAgent.drives.get('socialisation'), color: 'bg-sky-500' },
+                        { label: 'Territoriality', val: selectedAgent.drives.get('territoriality'), color: 'bg-purple-500' },
+                        { label: 'Rest', val: selectedAgent.drives.get('rest'), color: 'bg-indigo-500' },
+                      ].map((d) => (
+                        <div key={d.label} className="p-2.5 rounded bg-slate-900 border border-slate-800">
+                          <div className="flex items-center justify-between text-xs font-mono">
+                            <span className="text-slate-400">{d.label}</span>
+                            <span className="font-semibold text-white">{(d.val * 100).toFixed(0)}%</span>
+                          </div>
+                          <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                            <div className={`h-full rounded-full ${d.color}`} style={{ width: `${Math.min(100, d.val * 100)}%` }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Episodic Memories */}
+                  <div className="p-5 rounded-xl bg-slate-950/70 border border-slate-800">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-300 mb-3">
+                      Episodic Memory Buffer ({selectedAgent.memory.count} entries)
+                    </h4>
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                      {selectedAgent.memory.getAllMemories().slice(-6).map((m) => (
+                        <div key={m.id} className="flex items-center justify-between text-xs font-mono p-2 rounded bg-slate-900 border border-slate-800">
+                          <span className="text-slate-300">{m.eventType}</span>
+                          <span className="text-slate-400">Valence: {m.valence.toFixed(2)} | Str: {m.strength.toFixed(2)}</span>
+                          <span className="text-teal-400">T+{m.timestamp.toFixed(1)}s</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {activeTab === 'fields' && (
             <div className="space-y-6">
-              <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800">
-                <h3 className="text-xs font-mono uppercase tracking-wider text-slate-300 mb-3">Spatially Addressable 3D Environmental Fields</h3>
-                <p className="text-xs text-slate-400 mb-4">
-                  Fields form an abiotic substrate continuously driving nutrient bio-cycling, light attenuation, dissolved oxygen gradients, and temperature stratification.
+              <div className="p-5 rounded-xl bg-slate-950/70 border border-slate-800">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300 mb-3">
+                  Discrete Spatial Environmental Fields
+                </h3>
+                <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                  Environmental fields (Nutrients, Illumination, Dissolved Oxygen, and Temperature) are spatially resolved continuous fields that couple directly with agent perception, algae proliferation, and resource bio-cycling.
                 </p>
-
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {[
-                    { field: 'temperature', label: 'Water Temperature', unit: '°C', val: ecologySim.fields.sample(0, 0, 0, 'temperature').toFixed(1) + ' °C' },
-                    { field: 'illumination', label: 'Center Illumination', unit: 'lux', val: (ecologySim.fields.sample(0, 0, 0, 'illumination') * 100).toFixed(0) + '%' },
-                    { field: 'nutrients', label: 'Dissolved Nutrients', unit: 'ppm', val: (ecologySim.fields.sample(0, 0, 0, 'nutrients') * 100).toFixed(1) + ' ppm' },
-                    { field: 'oxygen', label: 'Dissolved Oxygen', unit: 'mg/L', val: (ecologySim.fields.sample(0, 0, 0, 'oxygen') * 100).toFixed(0) + '%' },
-                    { field: 'food', label: 'Dissolved Organic Matter', unit: 'mg/L', val: (ecologySim.fields.sample(0, 0, 0, 'food') * 100).toFixed(1) },
-                    { field: 'water_flow', label: 'Micro-current Velocity', unit: 'cm/s', val: '2.4 cm/s' },
-                  ].map((item) => (
-                    <div key={item.field} className="p-3 rounded-lg bg-slate-900 border border-slate-800 font-mono">
-                      <div className="text-xs text-slate-400">{item.label}</div>
-                      <div className="text-lg font-bold text-teal-300 mt-1">{item.val}</div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                    <div className="text-xs text-slate-400">Nutrients (Organic)</div>
+                    <div className="text-xl font-mono text-emerald-400 font-bold mt-1">
+                      {ecologySim.fields.sample(0, 0, 0, 'nutrients').toFixed(2)}
                     </div>
-                  ))}
+                  </div>
+                  <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                    <div className="text-xs text-slate-400">Illumination (Lux)</div>
+                    <div className="text-xl font-mono text-amber-400 font-bold mt-1">
+                      {ecologySim.fields.sample(0, 0, 0, 'illumination').toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                    <div className="text-xs text-slate-400">Dissolved Oxygen</div>
+                    <div className="text-xl font-mono text-sky-400 font-bold mt-1">
+                      {ecologySim.fields.sample(0, 0, 0, 'oxygen').toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                    <div className="text-xs text-slate-400">Water Temperature</div>
+                    <div className="text-xl font-mono text-teal-400 font-bold mt-1">
+                      {ecologySim.fields.sample(0, 0, 0, 'temperature').toFixed(1)}°C
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Ecological Resources */}
-              <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800">
-                <h3 className="text-xs font-mono uppercase tracking-wider text-slate-300 mb-3">Ecological Resources ({ecologySim.resources.resources.length})</h3>
-                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                  {ecologySim.resources.resources.map((res) => (
-                    <div key={res.id} className="flex items-center justify-between text-xs font-mono p-2 rounded bg-slate-900 border border-slate-800">
-                      <div>
-                        <span className="text-slate-200 font-semibold">{res.type}</span>
-                        <span className="text-slate-400 text-[10px] ml-2">({res.id})</span>
+              {/* Resources Status */}
+              <div className="p-5 rounded-xl bg-slate-950/70 border border-slate-800">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300 mb-3">
+                  Ecological Resources & Detritus Bio-cycling
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {ecologySim.resources.resources.slice(0, 9).map((res) => (
+                    <div key={res.id} className="p-3 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-teal-300">{res.type}</span>
+                        <span className="text-slate-400">Qty: {res.quantity.toFixed(2)}</span>
                       </div>
-                      <span className="text-teal-400">Qty: {res.quantity.toFixed(2)} / {res.maxQuantity.toFixed(2)}</span>
+                      <div className="text-[11px] text-slate-400 mt-1">
+                        Pos: ({res.position.x.toFixed(1)}, {res.position.y.toFixed(1)}, {res.position.z.toFixed(1)})
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -515,45 +724,42 @@ export const EcosystemInspectorModal: React.FC<EcosystemInspectorModalProps> = (
           )}
 
           {activeTab === 'persistence' && (
-            <div className="max-w-2xl mx-auto space-y-6">
-              <div className="p-6 rounded-xl bg-slate-950/80 border border-slate-800 text-center space-y-4">
-                <div className="inline-flex p-3 rounded-full bg-teal-900/40 text-teal-300 border border-teal-700/50">
-                  <Database className="w-8 h-8" />
-                </div>
-                <h3 className="text-lg font-mono font-bold text-white">Versioned World State Persistence (v0.1)</h3>
-                <p className="text-xs text-slate-400 leading-relaxed max-w-md mx-auto">
-                  Captures complete simulation state: multi-scalar clock, ecological epoch transitions, agent identities, motivations, episodic memories, inter-agent ties, environmental fields, and antics history.
+            <div className="space-y-6">
+              <div className="p-5 rounded-xl bg-slate-950/70 border border-slate-800">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300 mb-2">
+                  World State Persistence (Schema v0.2)
+                </h3>
+                <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                  Saves and restores the entire multi-scalar artificial ecology into persistent browser storage, including multi-scalar clock, ecological succession phases, population demographics, spatial habitats, authoritative causal event ledger, agent cognition, and environmental bio-cycling. Includes automatic idle-time catch-up simulation.
                 </p>
 
                 {persistenceFeedback && (
-                  <div className="p-3 rounded-lg bg-teal-950 border border-teal-800 text-xs font-mono text-teal-300">
+                  <div className="p-3 rounded-lg bg-teal-950 border border-teal-700 text-teal-300 text-xs font-mono mb-4">
                     {persistenceFeedback}
                   </div>
                 )}
 
-                <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                <div className="flex flex-wrap items-center gap-3">
                   <button
                     onClick={handleSave}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white font-medium text-xs shadow-lg transition-colors"
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-medium text-xs transition-colors shadow-lg shadow-teal-900/30"
                   >
                     <Save className="w-4 h-4" />
-                    Save World Snapshot
+                    Save World Snapshot (v0.2)
                   </button>
-
                   <button
                     onClick={handleLoad}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium text-xs transition-colors"
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs border border-slate-700 transition-colors"
                   >
                     <Upload className="w-4 h-4" />
-                    Load World Snapshot
+                    Load Stored State
                   </button>
-
                   <button
                     onClick={handleReset}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-800 font-medium text-xs transition-colors"
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-950/60 hover:bg-rose-900 text-rose-300 font-medium text-xs border border-rose-800 transition-colors ml-auto"
                   >
                     <RotateCcw className="w-4 h-4" />
-                    Reset to Genesis
+                    Reset Simulation
                   </button>
                 </div>
               </div>

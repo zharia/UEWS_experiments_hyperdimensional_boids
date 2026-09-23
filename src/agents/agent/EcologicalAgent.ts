@@ -23,8 +23,9 @@ import { RelationshipSystem, IRelationshipsJSON } from '../relationships/Relatio
 import { PerceptionSystem } from '../perception/PerceptionSystem';
 import { BehaviourSystem, ActiveBehaviour } from '../behaviour/BehaviourSystem';
 import { SteeringSubstrate, TankBounds3D } from '../locomotion/SteeringSubstrate';
+import { SpeciesRegistry, ISpecies } from '../../species/Species';
 
-export type LifecycleStage = 'juvenile' | 'adult' | 'elder';
+export type LifecycleStage = 'birth' | 'juvenile' | 'mature' | 'senescent' | 'dead' | 'adult' | 'elder';
 
 export interface IAgentJSON {
   id: string;
@@ -32,6 +33,7 @@ export interface IAgentJSON {
   lifecycle: LifecycleStage;
   ageSeconds: number;
   energy: number;
+  health?: number;
   position: { x: number; y: number; z: number };
   velocity: { x: number; y: number; z: number };
   latentState: ILatentStateJSON;
@@ -42,14 +44,21 @@ export interface IAgentJSON {
   currentAnticId?: string;
   burstPhase?: number;
   isBursting?: boolean;
+  lastReproductionTime?: number;
+  generation?: number;
+  currentHabitatId?: string;
 }
 
 export class EcologicalAgent {
   public readonly id: string;
   public readonly species: string;
-  public lifecycle: LifecycleStage = 'adult';
+  public lifecycle: LifecycleStage = 'mature';
   public ageSeconds: number = 0;
   public energy: number = 85.0; // 0-100%
+  public health: number = 100.0; // 0-100%
+  public lastReproductionTime: number = -100;
+  public generation: number = 0;
+  public currentHabitatId?: string;
 
   // Physical State
   public position: Vector3D;
@@ -97,17 +106,41 @@ export class EcologicalAgent {
     this.behaviour = new BehaviourSystem();
     this.steering = new SteeringSubstrate();
     this._wanderAngle = initialWanderAngle ?? 0;
+
+    // Apply species locomotion traits
+    const sp = this.speciesTraits;
+    this.steering.maxSpeed = sp.traits.movement.maxSpeed;
+    this.steering.maxForce = sp.traits.movement.maxForce;
+    this.steering.dragCoefficient = sp.traits.movement.dragCoefficient;
+  }
+
+  public get speciesTraits(): ISpecies {
+    return SpeciesRegistry.getOrFallback(this.species);
   }
 
   public updateDrives(simDt: number): void {
+    if (this.lifecycle === 'dead') return;
+
+    const sp = this.speciesTraits;
+    const baseMetabolism = sp.traits.resourceRequirements.metabolicRate;
+
     // Metabolic energy consumption
     const speed = this.velocity.length();
-    const burnRate = 0.08 + speed * 0.05;
+    // Senescent organisms burn energy slightly less efficiently
+    const senescenceFactor = this.lifecycle === 'senescent' || this.lifecycle === 'elder' ? 1.25 : 1.0;
+    const burnRate = (baseMetabolism + speed * 0.04) * senescenceFactor;
     this.energy = Math.max(0, this.energy - burnRate * simDt);
 
-    // If energy is low, drive hunger rises proportionally
-    if (this.energy < 50.0) {
-      this.drives.add('hunger', (1.0 - this.energy / 50.0) * 0.04 * simDt);
+    // Starvation dynamics
+    if (this.energy <= 0.05) {
+      this.health = Math.max(0, this.health - 2.5 * simDt);
+    } else if (this.energy > sp.traits.resourceRequirements.starvationThreshold && this.health < 100.0) {
+      this.health = Math.min(100.0, this.health + 0.8 * simDt);
+    }
+
+    // Hunger drive rises when energy drops
+    if (this.energy < 60.0) {
+      this.drives.add('hunger', (1.0 - this.energy / 60.0) * 0.045 * simDt);
     }
 
     this.drives.update(simDt);
@@ -118,12 +151,56 @@ export class EcologicalAgent {
     this.latentState.set(LatentState.DIM_CURIOSITY, this.drives.get('curiosity'));
     this.latentState.set(LatentState.DIM_SOCIAL_AFFINITY, this.drives.get('socialisation'));
     this.latentState.set(LatentState.DIM_TERRITORIALITY, this.drives.get('territoriality'));
+  }
 
-    // Aging & Lifecycle
-    this.ageSeconds += simDt;
-    if (this.ageSeconds > 600 && this.lifecycle === 'adult') {
-      this.lifecycle = 'elder';
+  /**
+   * Advances lifecycle stages dynamically based on age, energy, and health.
+   */
+  public advanceLifecycle(simDt: number): { transitioned: boolean; previousStage: LifecycleStage; currentStage: LifecycleStage } {
+    if (this.lifecycle === 'dead') {
+      return { transitioned: false, previousStage: 'dead', currentStage: 'dead' };
     }
+
+    const prevStage = this.lifecycle;
+    this.ageSeconds += simDt;
+    const sp = this.speciesTraits;
+    const { juvenileDuration, matureDuration, maxLifespan } = sp.traits.lifespan;
+
+    // Check starvation or extreme age death
+    if (this.health <= 0 || this.ageSeconds >= maxLifespan) {
+      this.lifecycle = 'dead';
+      this.velocity.multiplyScalar(0.2);
+      return { transitioned: true, previousStage: prevStage, currentStage: 'dead' };
+    }
+
+    if (this.lifecycle === 'birth') {
+      if (this.ageSeconds > 3.0) {
+        this.lifecycle = 'juvenile';
+      }
+    } else if (this.lifecycle === 'juvenile') {
+      if (this.ageSeconds >= juvenileDuration && this.energy >= 30.0) {
+        this.lifecycle = 'mature';
+      }
+    } else if (this.lifecycle === 'mature' || this.lifecycle === 'adult') {
+      if (this.ageSeconds >= (juvenileDuration + matureDuration) || this.health < 40.0) {
+        this.lifecycle = 'senescent';
+      }
+    }
+
+    return {
+      transitioned: this.lifecycle !== prevStage,
+      previousStage: prevStage,
+      currentStage: this.lifecycle,
+    };
+  }
+
+  public canReproduce(simTime: number): boolean {
+    if (this.lifecycle !== 'mature' && this.lifecycle !== 'adult') return false;
+    const sp = this.speciesTraits;
+    if (this.energy < sp.traits.reproduction.minEnergyToReproduce) return false;
+    if (simTime - this.lastReproductionTime < sp.traits.reproduction.recoveryInterval) return false;
+    if (this.health < 65.0) return false;
+    return true;
   }
 
   public updateMemory(simDt: number): void {
@@ -131,6 +208,17 @@ export class EcologicalAgent {
   }
 
   public applySteering(bounds: TankBounds3D, simDt: number, randomDelta?: number): void {
+    if (this.lifecycle === 'dead') {
+      // Dead agent sinks passively to the benthic substrate
+      if (this.position.y > bounds.minY + 0.3) {
+        this.velocity.y = -0.5;
+        this.velocity.x *= 0.92;
+        this.velocity.z *= 0.92;
+        this.position.addScaled(this.velocity, simDt);
+      }
+      return;
+    }
+
     const active = this.behaviour.currentBehaviour;
     let force = new Vector3D(0, 0, 0);
 
@@ -138,6 +226,8 @@ export class EcologicalAgent {
     if (active.type === 'flee' && active.targetPosition) {
       force.add(this.steering.flee(this.position, this.velocity, active.targetPosition));
       this.isBursting = true;
+    } else if ((active.type === 'migrate' || active.type === 'feed' || active.type === 'investigate' || active.type === 'approach' || active.type === 'socialise') && active.targetPosition) {
+      force.add(this.steering.seek(this.position, this.velocity, active.targetPosition, active.desiredSpeedMultiplier));
     } else if (active.targetPosition) {
       force.add(this.steering.seek(this.position, this.velocity, active.targetPosition, active.desiredSpeedMultiplier));
     } else if (active.type === 'wander') {
@@ -168,7 +258,9 @@ export class EcologicalAgent {
   }
 
   public consumeFood(nutritionAmount: number, simTime: number): void {
-    this.energy = Math.min(100.0, this.energy + nutritionAmount * 25.0);
+    const sp = this.speciesTraits;
+    const gained = nutritionAmount * sp.traits.resourceRequirements.consumptionRate;
+    this.energy = Math.min(100.0, this.energy + gained);
     this.drives.satisfy('hunger', 0.55);
     this.memory.addMemory('food_discovered', this.position, simTime, 0.8, 1.0, undefined, { nutrition: nutritionAmount });
   }
@@ -180,6 +272,7 @@ export class EcologicalAgent {
       lifecycle: this.lifecycle,
       ageSeconds: this.ageSeconds,
       energy: this.energy,
+      health: this.health,
       position: this.position.toJSON(),
       velocity: this.velocity.toJSON(),
       latentState: this.latentState.toJSON(),
@@ -190,14 +283,19 @@ export class EcologicalAgent {
       currentAnticId: this.currentAnticId,
       burstPhase: this.burstPhase,
       isBursting: this.isBursting,
+      lastReproductionTime: this.lastReproductionTime,
+      generation: this.generation,
+      currentHabitatId: this.currentHabitatId,
     };
   }
 
   public static fromJSON(json: IAgentJSON): EcologicalAgent {
     const agent = new EcologicalAgent(json.id, json.species);
-    agent.lifecycle = json.lifecycle || 'adult';
+    agent.lifecycle = json.lifecycle || 'mature';
+
     agent.ageSeconds = json.ageSeconds || 0;
     agent.energy = json.energy ?? 85;
+    agent.health = json.health ?? 100;
     agent.position = Vector3D.fromJSON(json.position);
     agent.velocity = Vector3D.fromJSON(json.velocity);
     if (json.latentState) {
@@ -218,6 +316,9 @@ export class EcologicalAgent {
     agent.currentAnticId = json.currentAnticId;
     agent.burstPhase = json.burstPhase || 0;
     agent.isBursting = json.isBursting || false;
+    agent.lastReproductionTime = json.lastReproductionTime ?? -100;
+    agent.generation = json.generation ?? 0;
+    agent.currentHabitatId = json.currentHabitatId;
     return agent;
   }
 }

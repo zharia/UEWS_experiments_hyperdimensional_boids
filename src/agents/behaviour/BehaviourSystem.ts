@@ -37,7 +37,9 @@ export type BehaviourType =
   | 'approach'
   | 'socialise'
   | 'defend'
-  | 'explore';
+  | 'explore'
+  | 'migrate'
+  | 'mate';
 
 export interface BehaviourCandidate {
   type: BehaviourType;
@@ -77,7 +79,9 @@ export class BehaviourSystem {
     perceivedAgents: PerceivedAgent[],
     perceivedResources: PerceivedResource[],
     perceivedHazards: PerceivedHazard[],
-    simTime: number
+    simTime: number,
+    migrationTarget?: { habitatId: string; position: Vector3D; suitabilityDelta: number },
+    canReproduce: boolean = false
   ): BehaviourCandidate[] {
     const candidates: BehaviourCandidate[] = [];
 
@@ -113,7 +117,7 @@ export class BehaviourSystem {
     }
 
     // 2. FEED (energy replenishment)
-    const foodResources = perceivedResources.filter((r) => r.type === 'food' || r.type === 'biofilm');
+    const foodResources = perceivedResources.filter((r) => r.type === 'food' || r.type === 'biofilm' || r.type === 'detritus' || r.type === 'food_pellet');
     if (foodResources.length > 0 && hunger > 0.25) {
       // Find closest salient food item
       foodResources.sort((a, b) => (a.distance / a.salience) - (b.distance / b.salience));
@@ -125,6 +129,48 @@ export class BehaviourSystem {
         targetPosition: targetFood.position,
         targetEntityId: targetFood.id,
         reason: `Targeting detected food (hunger: ${hunger.toFixed(2)})`,
+      });
+    } else if (hunger > 0.4) {
+      // Memory-biased foraging: recall positive food site
+      const foodMem = memory.getMostSalientMemory('food_discovered');
+      if (foodMem && foodMem.strength > 0.2) {
+        candidates.push({
+          type: 'feed',
+          score: hunger * 1.4 * foodMem.strength,
+          urgency: hunger * 0.8,
+          targetPosition: new Vector3D(foodMem.location.x, foodMem.location.y, foodMem.location.z),
+          reason: `Navigating to remembered food discovery site (salience: ${foodMem.strength.toFixed(2)})`,
+        });
+      }
+    }
+
+    // 2.5 MATE / COURTSHIP (reproductive imperative)
+    if (canReproduce) {
+      const matureConspecifics = perceivedAgents.filter((a) => a.isConspecific);
+      for (const partner of matureConspecifics) {
+        const rel = relationships.getRelationship(partner.id);
+        if (rel.affinity > 0.05 && rel.fear < 0.25) {
+          candidates.push({
+            type: 'mate',
+            score: 1.6 + rel.affinity * 0.5,
+            urgency: 0.75,
+            targetPosition: partner.position,
+            targetEntityId: partner.id,
+            reason: `Initiating courtship approach with partner ${partner.id}`,
+          });
+          break;
+        }
+      }
+    }
+
+    // 2.8 MIGRATE (Habitat suitability differential)
+    if (migrationTarget && migrationTarget.suitabilityDelta > 0.25) {
+      candidates.push({
+        type: 'migrate',
+        score: exploration * 0.8 + migrationTarget.suitabilityDelta * 1.2,
+        urgency: migrationTarget.suitabilityDelta * 0.7,
+        targetPosition: migrationTarget.position,
+        reason: `Migrating to higher-suitability habitat (${migrationTarget.habitatId})`,
       });
     }
 
@@ -270,6 +316,8 @@ export class BehaviourSystem {
       case 'rest': speedMult = 0.2; break;
       case 'defend': speedMult = 0.8; break;
       case 'explore': speedMult = 1.1; break;
+      case 'migrate': speedMult = 1.25; break;
+      case 'mate': speedMult = 0.75; break;
       case 'wander': default: speedMult = 0.9; break;
     }
 

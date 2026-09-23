@@ -69,6 +69,10 @@ class AquariumAudioEngine {
     return this.isMuted;
   }
 
+  public getVolume(): number {
+    return this.volume;
+  }
+
   public setVolume(val: number) {
     this.volume = Math.max(0, Math.min(1, val));
     if (!this.isMuted && this.masterGain && this.ctx) {
@@ -366,6 +370,39 @@ class AquariumAudioEngine {
       osc.stop(t + 0.19);
     } catch {
       // Ignore audio synthesis errors in background/unfocused state
+    }
+  }
+
+  public playCameraShutter() {
+    if (this.isMuted || !this.ctx || !this.masterGain) return;
+    try {
+      const t = this.ctx.currentTime;
+      // Dual-click mechanical shutter sound
+      const osc1 = this.ctx.createOscillator();
+      const gain1 = this.ctx.createGain();
+      osc1.type = 'triangle';
+      osc1.frequency.setValueAtTime(1200, t);
+      osc1.frequency.exponentialRampToValueAtTime(260, t + 0.04);
+      gain1.gain.setValueAtTime(0.18, t);
+      gain1.gain.exponentialRampToValueAtTime(0.001, t + 0.045);
+      osc1.connect(gain1);
+      gain1.connect(this.masterGain);
+      osc1.start(t);
+      osc1.stop(t + 0.05);
+
+      const osc2 = this.ctx.createOscillator();
+      const gain2 = this.ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(950, t + 0.06);
+      osc2.frequency.exponentialRampToValueAtTime(180, t + 0.11);
+      gain2.gain.setValueAtTime(0.15, t + 0.06);
+      gain2.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+      osc2.connect(gain2);
+      gain2.connect(this.masterGain);
+      osc2.start(t + 0.06);
+      osc2.stop(t + 0.13);
+    } catch {
+      // Audio error fallback
     }
   }
 }
