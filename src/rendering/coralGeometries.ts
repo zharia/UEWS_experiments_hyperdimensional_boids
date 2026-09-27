@@ -4,7 +4,7 @@
  */
 
 import * as THREE from 'three';
-import { createSandMesh } from './sandTexture';
+import { createSandMesh, BenthicCausticUniforms } from './sandTexture';
 import { createProceduralRockTextures, createSculptedRockGeometry } from './rockTexture';
 import {
   createAcroporaTreeGeometry,
@@ -25,6 +25,7 @@ export interface CoralSceneObjects {
   bubbleVelocities: Float32Array;
   plantMaterials: THREE.ShaderMaterial[];
   plantLifecycleSim: PlantLifecycleSimulation;
+  benthicCausticUniforms: BenthicCausticUniforms;
 }
 
 /**
@@ -36,8 +37,16 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
   const plantMaterials: THREE.ShaderMaterial[] = [];
   const plantLifecycleSim = new PlantLifecycleSimulation();
 
-  // 1. Procedural Sand bed / Sea floor with multi-frequency noise
-  const sandMesh = createSandMesh();
+  const benthicCausticUniforms: BenthicCausticUniforms = {
+    uTime: { value: 0 },
+    uCausticStrength: { value: 0.8 },
+    uTurbidity: { value: 0.08 },
+    uClarity: { value: 0.92 },
+    uDetritus: { value: 0.0 },
+  };
+
+  // 1. Procedural Sand bed / Sea floor with multi-frequency noise & dynamic caustics
+  const sandMesh = createSandMesh(benthicCausticUniforms);
   coralGroup.add(sandMesh);
 
   // 2. High-Fidelity Natural Reef Rocks (Sculpted organic stone with procedural strata & mineral veining)
@@ -53,6 +62,67 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
     emissive: 0x2e2924, // Warm ambient baseline so rocks never collapse into pitch-black shadow
     emissiveIntensity: 0.42,
   });
+
+  rockMat.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = benthicCausticUniforms.uTime;
+    shader.uniforms.uCausticStrength = benthicCausticUniforms.uCausticStrength;
+    shader.uniforms.uTurbidity = benthicCausticUniforms.uTurbidity;
+    shader.uniforms.uClarity = benthicCausticUniforms.uClarity;
+
+    shader.vertexShader = `
+      varying vec3 vWorldPosRock;
+      ${shader.vertexShader}
+    `.replace(
+      '#include <worldpos_vertex>',
+      `
+      #include <worldpos_vertex>
+      vWorldPosRock = (modelMatrix * vec4(transformed, 1.0)).xyz;
+      `
+    );
+
+    shader.fragmentShader = `
+      varying vec3 vWorldPosRock;
+      uniform float uTime;
+      uniform float uCausticStrength;
+      uniform float uTurbidity;
+      uniform float uClarity;
+
+      float hashRock(vec2 p) {
+        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+      }
+
+      float smoothNoiseRock(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        float a = hashRock(i);
+        float b = hashRock(i + vec2(1.0, 0.0));
+        float c = hashRock(i + vec2(0.0, 1.0));
+        float d = hashRock(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+      }
+
+      float causticRibbonsRock(vec2 p, float t) {
+        vec2 uv1 = p * 0.45 + vec2(t * 0.14, t * 0.09);
+        vec2 uv2 = p * 0.52 - vec2(t * 0.11, -t * 0.16);
+        float n1 = smoothNoiseRock(uv1);
+        float n2 = smoothNoiseRock(uv2);
+        return pow(abs(sin(n1 * 6.28 + n2 * 6.28)), 3.2);
+      }
+
+      ${shader.fragmentShader}
+    `.replace(
+      '#include <dithering_fragment>',
+      `
+      // Dancing water caustics over rock faces
+      float cPat = causticRibbonsRock(vWorldPosRock.xz + vWorldPosRock.yy * 0.3, uTime * 0.8);
+      float cAtt = (1.0 - uTurbidity * 0.65) * uCausticStrength * uClarity;
+      gl_FragColor.rgb += vec3(0.32, 0.72, 0.95) * (cPat * cAtt * 0.35);
+
+      #include <dithering_fragment>
+      `
+    );
+  };
 
   const rockPositions = [
     { x: -9.5, y: -5.8, z: -2.0, scale: [1.8, 1.4, 1.6] },
@@ -250,7 +320,7 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
   plantMaterials.push(kelpMat1);
 
   const kelpPos1 = new THREE.Vector3(-2.8, -6.8, -3.2);
-  const kelpData1 = createGiantKelpGeometry(kelpPos1, 24, 7.8);
+  const kelpData1 = createGiantKelpGeometry(kelpPos1, 8, 7.8);
   const kelpMesh1 = new THREE.Mesh(kelpData1.stemGeometry, kelpMat1);
   kelpMesh1.receiveShadow = true;
 
@@ -309,7 +379,7 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
   plantMaterials.push(kelpMat2);
 
   const kelpPos2 = new THREE.Vector3(3.4, -6.8, -2.6);
-  const kelpData2 = createGiantKelpGeometry(kelpPos2, 20, 7.2);
+  const kelpData2 = createGiantKelpGeometry(kelpPos2, 6, 7.2);
   const kelpMesh2 = new THREE.Mesh(kelpData2.stemGeometry, kelpMat2);
   kelpMesh2.receiveShadow = true;
 
@@ -601,6 +671,7 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
     bubbleVelocities,
     plantMaterials,
     plantLifecycleSim,
+    benthicCausticUniforms,
   };
 }
 

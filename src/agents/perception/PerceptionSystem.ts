@@ -11,6 +11,9 @@
 import { Vector3D } from '../../space/physical/Vector3D';
 import { LatentState } from '../../space/hyperdimensional/LatentState';
 import { EnvironmentalFieldType, ISpatialFieldProvider } from '../../space/fields/EnvironmentalField';
+import { AcousticEvent, AcousticSourceType } from '../../ecology/acoustic/AcousticState';
+import { AcousticField } from '../../ecology/acoustic/AcousticField';
+import { AcousticSensoryTraits } from '../../species/Species';
 
 export interface PerceivedAgent {
   id: string;
@@ -39,6 +42,26 @@ export interface PerceivedHazard {
   position: Vector3D;
   distance: number;
   threatLevel: number;
+}
+
+export interface PerceivedAcousticEvent {
+  id: string;
+  sourceType: AcousticSourceType;
+  position: Vector3D;
+  distance: number;
+  perceivedIntensity: number; // 0 to 1, attenuated by distance & habitat damping
+  salience: number; // 0 to 1
+  isStartling: boolean; // Sudden loud shockwave / collision / disturbance
+  isAttractive: boolean; // Feeding strike, surface water impact, food drop
+  frequencyHz?: number;
+  description: string;
+}
+
+export interface PerceivedAcousticSensoryState {
+  ambientSoundPressureDb: number;
+  flowVibrationLevel: number; // 0 to 1, neuromast lateral-line activation
+  acousticGradient: Vector3D; // direction towards sound origin / turbulence
+  dominantCondition: 'calm' | 'flowing' | 'turbulent' | 'disturbed';
 }
 
 export interface PerceptionConfig {
@@ -127,5 +150,119 @@ export class PerceptionSystem {
 
     const gradient = new Vector3D(dx / (2 * eps), dy / (2 * eps), dz / (2 * eps));
     return { value: center, gradient };
+  }
+
+  /**
+   * Senses discrete acoustic events within the agent's auditory & lateral-line detection radius.
+   * Incorporates species hearing acuity, habitat spectral damping, and distance attenuation.
+   */
+  public senseAcousticEvents(
+    selfPos: Vector3D,
+    recentEvents: AcousticEvent[],
+    acousticField: AcousticField,
+    sensoryTraits?: AcousticSensoryTraits
+  ): PerceivedAcousticEvent[] {
+    const acuity = sensoryTraits?.hearingAcuity ?? 1.0;
+    const effectiveRadius = (this.config.auditoryRadius * 2.5) * acuity; // e.g. ~8.75 to 12.5 units
+    const startleThreshold = sensoryTraits?.startleThreshold ?? 0.5;
+    const attractionTendency = sensoryTraits?.foragingAcousticAttraction ?? 0.5;
+
+    const perceived: PerceivedAcousticEvent[] = [];
+    const localProp = acousticField.sampleAt(selfPos.x, selfPos.y, selfPos.z);
+
+    for (const ev of recentEvents) {
+      const evPos = new Vector3D(ev.location.x, ev.location.y, ev.location.z);
+      const dist = selfPos.distanceTo(evPos);
+      if (dist > effectiveRadius) continue;
+
+      // Distance attenuation + habitat spectral damping & benthic/canopy occlusion
+      const damping = 1.0 + (localProp.spectral_damping * 1.4) + (localProp.occlusion_factor * 2.2);
+      const attenuation = 1.0 / (1.0 + 0.12 * dist * damping);
+      const perceivedIntensity = Math.min(1.0, ev.intensity * acuity * attenuation);
+
+      if (perceivedIntensity < 0.06) continue;
+
+      // Startling events: mechanical substrate shocks, glass taps, sudden collisions, surface splashes
+      const isMechanicalDisturbance =
+        ev.source === 'substrate_disturbance' ||
+        ev.source === 'organism_collision' ||
+        ev.source === 'water_ripple' ||
+        ev.source === 'glass_interaction';
+
+      const isStartling =
+        (isMechanicalDisturbance || ev.intensity >= 0.55) &&
+        (perceivedIntensity >= startleThreshold * 0.75);
+
+      // Attractive events: feeding clicks, surface pellet drops
+      const isFeedingOrFood =
+        ev.source === 'feeding_strike' ||
+        (ev.source === 'water_ripple' && ev.location.y > 4.5);
+      const isAttractive =
+        isFeedingOrFood &&
+        (attractionTendency >= 0.3) &&
+        (perceivedIntensity >= 0.08);
+
+      const salience = Math.min(1.0, perceivedIntensity * (isStartling ? 1.5 : isAttractive ? 1.3 : 0.85));
+
+      perceived.push({
+        id: ev.id,
+        sourceType: ev.source,
+        position: evPos,
+        distance: dist,
+        perceivedIntensity,
+        salience,
+        isStartling,
+        isAttractive,
+        description: ev.cause?.description || `${ev.source.replace(/_/g, ' ')} at (${evPos.x.toFixed(1)}, ${evPos.y.toFixed(1)})`,
+      });
+    }
+
+    return perceived.sort((a, b) => b.salience - a.salience);
+  }
+
+  /**
+   * Senses continuous acoustic field parameters & lateral-line flow vibration gradients.
+   */
+  public senseAcousticSensoryState(
+    selfPos: Vector3D,
+    acousticField: AcousticField,
+    sensoryTraits?: AcousticSensoryTraits
+  ): PerceivedAcousticSensoryState {
+    const latLineSensitivity = sensoryTraits?.lateralLineSensitivity ?? 1.0;
+    const local = acousticField.sampleAt(selfPos.x, selfPos.y, selfPos.z);
+    const signature = acousticField.getSignature();
+
+    const ambientSoundPressureDb = signature.estimated_loudness_db + (local.ambient_gain - 0.25) * 12.0;
+    const flowVibrationLevel = Math.min(1.0, (signature.water_activity * 0.6 + signature.turbulence * 0.4) * latLineSensitivity);
+
+    const eps = 1.0;
+    const pX1 = acousticField.sampleAt(selfPos.x + eps, selfPos.y, selfPos.z).ambient_gain;
+    const pX0 = acousticField.sampleAt(selfPos.x - eps, selfPos.y, selfPos.z).ambient_gain;
+    const pY1 = acousticField.sampleAt(selfPos.x, selfPos.y + eps, selfPos.z).ambient_gain;
+    const pY0 = acousticField.sampleAt(selfPos.x, selfPos.y - eps, selfPos.z).ambient_gain;
+    const pZ1 = acousticField.sampleAt(selfPos.x, selfPos.y, selfPos.z + eps).ambient_gain;
+    const pZ0 = acousticField.sampleAt(selfPos.x, selfPos.y, selfPos.z - eps).ambient_gain;
+
+    const acousticGradient = new Vector3D(
+      (pX1 - pX0) / (2 * eps),
+      (pY1 - pY0) / (2 * eps),
+      (pZ1 - pZ0) / (2 * eps)
+    );
+
+    let dominantCondition: 'calm' | 'flowing' | 'turbulent' | 'disturbed' = 'calm';
+    if (signature.disturbance > 0.3) {
+      dominantCondition = 'disturbed';
+    } else if (signature.turbulence > 0.4) {
+      dominantCondition = 'turbulent';
+    } else if (signature.water_activity > 0.35) {
+      dominantCondition = 'flowing';
+    }
+
+    return {
+      ambientSoundPressureDb,
+      flowVibrationLevel,
+      acousticGradient,
+      dominantCondition,
+    };
   }
 }

@@ -150,10 +150,18 @@ export function createProceduralSandTextures(): {
   return { sandTexture, sandBumpTexture };
 }
 
+export interface BenthicCausticUniforms {
+  uTime: { value: number };
+  uCausticStrength: { value: number };
+  uTurbidity: { value: number };
+  uClarity: { value: number };
+  uDetritus: { value: number };
+}
+
 /**
- * Creates the sea floor mesh with multi-frequency vertex height displacement.
+ * Creates the sea floor mesh with multi-frequency vertex height displacement and dynamic caustics.
  */
-export function createSandMesh(): THREE.Mesh {
+export function createSandMesh(uniforms?: BenthicCausticUniforms): THREE.Mesh {
   const sandGeo = new THREE.PlaneGeometry(32, 16, 64, 32);
   const posAttr = sandGeo.attributes.position;
 
@@ -180,6 +188,76 @@ export function createSandMesh(): THREE.Mesh {
     roughness: 0.88,
     metalness: 0.04,
   });
+
+  if (uniforms) {
+    sandMat.onBeforeCompile = (shader) => {
+      shader.uniforms.uTime = uniforms.uTime;
+      shader.uniforms.uCausticStrength = uniforms.uCausticStrength;
+      shader.uniforms.uTurbidity = uniforms.uTurbidity;
+      shader.uniforms.uClarity = uniforms.uClarity;
+      shader.uniforms.uDetritus = uniforms.uDetritus;
+
+      shader.vertexShader = `
+        varying vec3 vWorldPos;
+        ${shader.vertexShader}
+      `.replace(
+        '#include <worldpos_vertex>',
+        `
+        #include <worldpos_vertex>
+        vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+        `
+      );
+
+      shader.fragmentShader = `
+        varying vec3 vWorldPos;
+        uniform float uTime;
+        uniform float uCausticStrength;
+        uniform float uTurbidity;
+        uniform float uClarity;
+        uniform float uDetritus;
+
+        float hashBenthic(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+        }
+
+        float smoothNoiseBenthic(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          float a = hashBenthic(i);
+          float b = hashBenthic(i + vec2(1.0, 0.0));
+          float c = hashBenthic(i + vec2(0.0, 1.0));
+          float d = hashBenthic(i + vec2(1.0, 1.0));
+          return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+        }
+
+        float causticRibbons(vec2 p, float t) {
+          vec2 uv1 = p * 0.45 + vec2(t * 0.14, t * 0.09);
+          vec2 uv2 = p * 0.52 - vec2(t * 0.11, -t * 0.16);
+          float n1 = smoothNoiseBenthic(uv1);
+          float n2 = smoothNoiseBenthic(uv2);
+          return pow(abs(sin(n1 * 6.28 + n2 * 6.28)), 3.2);
+        }
+
+        ${shader.fragmentShader}
+      `.replace(
+        '#include <dithering_fragment>',
+        `
+        // Dual-octave animated water caustics dancing on benthic sea floor
+        float cPattern = causticRibbons(vWorldPos.xz, uTime * 0.8);
+        float cAttenuation = (1.0 - uTurbidity * 0.65) * uCausticStrength * uClarity;
+        vec3 causticHighlight = vec3(0.35, 0.78, 0.98) * (cPattern * cAttenuation * 0.45);
+        gl_FragColor.rgb += causticHighlight;
+
+        // Benthic detritus / organic sediment tinting
+        vec3 detritusTint = vec3(0.62, 0.52, 0.40);
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, gl_FragColor.rgb * detritusTint, clamp(uDetritus * 0.75, 0.0, 0.65));
+
+        #include <dithering_fragment>
+        `
+      );
+    };
+  }
 
   const sandMesh = new THREE.Mesh(sandGeo, sandMat);
   sandMesh.rotation.x = -Math.PI / 2;

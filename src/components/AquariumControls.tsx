@@ -25,10 +25,12 @@ import {
   Clock,
   RotateCcw,
   CircleDot,
+  Camera,
+  Eye,
 } from 'lucide-react';
 import { InteractionTool, LightingPreset, ProcessRegimePreset } from '../types';
 import { ProceduralFloraSimulation } from '../simulation/flora';
-import { AquariumSceneManager } from '../rendering/aquariumScene';
+import { AquariumSceneManager, CameraPreset, CAMERA_PRESETS } from '../rendering/aquariumScene';
 import { BoidSimulation4D } from '../simulation/boids4D';
 import { SPECIES_CONFIGS } from '../simulation/species';
 
@@ -336,6 +338,48 @@ export const AquariumControls: React.FC<AquariumControlsProps> = ({
               {currentTool === 'clean_glass' && 'Drag magnetic scrubber across the glass to scrape off algae.'}
               {currentTool === 'stir_water' && 'Click or drag to create currents; taps startle micro-fauna.'}
             </p>
+          </div>
+
+          {/* Camera Viewport Perspectives */}
+          <div className="pt-3 border-t border-slate-800">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
+                <Camera className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Camera Viewports</span>
+              </span>
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                Key: V
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-1.5">
+              {(Object.keys(CAMERA_PRESETS) as CameraPreset[]).map((presetKey) => {
+                const config = CAMERA_PRESETS[presetKey];
+                const isActive = sceneManager?.activeCameraPreset === presetKey && !sceneManager?.isZenTour;
+
+                return (
+                  <button
+                    key={presetKey}
+                    onClick={() => {
+                      if (sceneManager) {
+                        sceneManager.setCameraPreset(presetKey);
+                        forceUpdate();
+                      }
+                    }}
+                    className={`flex flex-col text-left p-2 rounded-xl border transition-all ${
+                      isActive
+                        ? 'bg-cyan-950/80 text-cyan-200 border-cyan-500 shadow-[0_0_12px_rgba(6,182,212,0.25)]'
+                        : 'bg-slate-800/50 text-slate-300 border-slate-700 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span className="text-xs font-medium">{config.name}</span>
+                    <span className="text-[9px] text-slate-400 leading-tight mt-0.5 line-clamp-1">
+                      {config.description}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Multi-Scalar Ecosystem & Process Regimes */}
@@ -1178,6 +1222,76 @@ export const AquariumControls: React.FC<AquariumControlsProps> = ({
               </div>
             )}
           </div>
+
+          {/* Volumetric Atmosphere & Backdrop Translucency */}
+          {sceneManager && (
+            <div className="pt-3 border-t border-slate-800 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold">
+                  Backdrop Translucency
+                </span>
+                <span className="text-[11px] font-mono text-cyan-400">
+                  {Math.round((1 - sceneManager.backdropOpacity) * 100)}% Translucent
+                </span>
+              </div>
+              <div className="bg-slate-800/40 p-2.5 rounded-xl border border-slate-700/50 flex flex-col gap-2">
+                <div className="flex justify-between text-[11px] text-slate-300 font-mono">
+                  <span>Backdrop Opacity</span>
+                  <span className="text-cyan-300">{(sceneManager.backdropOpacity * 100).toFixed(0)}%</span>
+                </div>
+                <input
+                  id="slider-backdrop-opacity"
+                  type="range"
+                  min={0.2}
+                  max={1.0}
+                  step={0.02}
+                  value={sceneManager.backdropOpacity}
+                  onChange={(e) => {
+                    sceneManager.setBackdropOpacity(parseFloat(e.target.value));
+                    forceUpdate();
+                  }}
+                  className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                />
+                <div className="flex justify-between text-[9px] text-slate-500 font-mono">
+                  <span>Clear (20%)</span>
+                  <span className="text-cyan-400/80">Slightly Translucent (82%)</span>
+                  <span>Solid (100%)</span>
+                </div>
+                <p className="text-[10px] text-slate-400 italic">
+                  Allows desk woodwork and ambient room environment to softly show through the 3-sided aquarium enclosure.
+                </p>
+                <div className="flex items-center gap-1.5 pt-0.5">
+                  <button
+                    onClick={() => {
+                      sceneManager.setBackdropOpacity(0.55);
+                      forceUpdate();
+                    }}
+                    className="flex-1 py-1 rounded bg-slate-800/70 hover:bg-slate-800 border border-slate-700/70 text-[10px] text-slate-300 font-mono transition-colors"
+                  >
+                    High Glass
+                  </button>
+                  <button
+                    onClick={() => {
+                      sceneManager.setBackdropOpacity(0.82);
+                      forceUpdate();
+                    }}
+                    className="flex-1 py-1 rounded bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-700/50 text-[10px] text-cyan-300 font-mono transition-colors"
+                  >
+                    Slight (Default)
+                  </button>
+                  <button
+                    onClick={() => {
+                      sceneManager.setBackdropOpacity(1.0);
+                      forceUpdate();
+                    }}
+                    className="flex-1 py-1 rounded bg-slate-800/70 hover:bg-slate-800 border border-slate-700/70 text-[10px] text-slate-300 font-mono transition-colors"
+                  >
+                    Solid Opaque
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* 4D Multi-Scalar Species Field Guide */}
           <div className="pt-3 border-t border-slate-800 flex flex-col gap-2">

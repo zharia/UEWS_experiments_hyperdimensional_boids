@@ -20,7 +20,11 @@ import { LatentState, ILatentStateJSON } from '../../space/hyperdimensional/Late
 import { DriveSystem, IDrivesJSON } from '../drives/DriveSystem';
 import { MemorySystem, IMemoryJSON } from '../memory/MemorySystem';
 import { RelationshipSystem, IRelationshipsJSON } from '../relationships/RelationshipSystem';
-import { PerceptionSystem } from '../perception/PerceptionSystem';
+import {
+  PerceptionSystem,
+  PerceivedAcousticEvent,
+  PerceivedAcousticSensoryState,
+} from '../perception/PerceptionSystem';
 import { BehaviourSystem, ActiveBehaviour } from '../behaviour/BehaviourSystem';
 import { SteeringSubstrate, TankBounds3D } from '../locomotion/SteeringSubstrate';
 import { SpeciesRegistry, ISpecies } from '../../species/Species';
@@ -81,6 +85,11 @@ export class EcologicalAgent {
   public burstPhase: number = 0;
   public isBursting: boolean = false;
   private _wanderAngle: number = 0;
+
+  // Acoustic Sensory State (Lateral Line & Otoliths)
+  public lastPerceivedAcousticEvents: PerceivedAcousticEvent[] = [];
+  public lastAcousticSensoryState?: PerceivedAcousticSensoryState;
+  public startleCooldown: number = 0; // seconds remaining in startle state
 
   constructor(
     id: string,
@@ -143,6 +152,10 @@ export class EcologicalAgent {
       this.drives.add('hunger', (1.0 - this.energy / 60.0) * 0.045 * simDt);
     }
 
+    if (this.startleCooldown > 0) {
+      this.startleCooldown = Math.max(0, this.startleCooldown - simDt);
+    }
+
     this.drives.update(simDt);
 
     // Sync drives to latent state channels for hyperdimensional query
@@ -151,6 +164,41 @@ export class EcologicalAgent {
     this.latentState.set(LatentState.DIM_CURIOSITY, this.drives.get('curiosity'));
     this.latentState.set(LatentState.DIM_SOCIAL_AFFINITY, this.drives.get('socialisation'));
     this.latentState.set(LatentState.DIM_TERRITORIALITY, this.drives.get('territoriality'));
+  }
+
+  /**
+   * Registers perceived acoustic events and field stimulation into agent drives, memory, and kinematics.
+   */
+  public registerAcousticStimulation(
+    perceivedEvents: PerceivedAcousticEvent[],
+    sensoryState: PerceivedAcousticSensoryState,
+    simTime: number
+  ): void {
+    this.lastPerceivedAcousticEvents = perceivedEvents;
+    this.lastAcousticSensoryState = sensoryState;
+
+    // Startle reflex from loud mechanical disturbances
+    const startle = perceivedEvents.find((e) => e.isStartling);
+    if (startle && this.startleCooldown <= 0) {
+      this.startleCooldown = 1.8;
+      this.isBursting = true;
+      this.drives.add('fear', startle.perceivedIntensity * 0.45);
+      this.memory.addMemory(
+        'hazard_avoided',
+        startle.position,
+        simTime,
+        -0.7,
+        startle.salience,
+        undefined,
+        { source: startle.sourceType, perceivedIntensity: startle.perceivedIntensity }
+      );
+    }
+
+    // Feeding click / surface impact attraction
+    const attractive = perceivedEvents.find((e) => e.isAttractive);
+    if (attractive) {
+      this.drives.add('curiosity', attractive.perceivedIntensity * 0.25);
+    }
   }
 
   /**

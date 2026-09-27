@@ -16,6 +16,12 @@ import { aquariumAudio } from '../audio/aquariumAudio';
 import { benchmarkEngine } from '../utils/performanceBenchmark';
 import { ScreenSpaceDisplacementPass } from './screenSpaceDisplacement';
 import { SPECIES_CONFIGS } from '../simulation/species';
+import { createWaterVolumeBackingMaterial } from './waterVolumeAtmosphere';
+import { SuspendedParticleSystem } from './suspendedParticles';
+import { SedimentPlumeSystem } from './sedimentPlume';
+import { EcologySimulation } from '../simulation/EcologySimulation';
+import { Vector3D } from '../space/physical/Vector3D';
+import { BoidMorphologyManager } from '../morphology/BoidMorphologyManager';
 
 interface CircadianKeyframe {
   phase: number;
@@ -99,6 +105,57 @@ const CIRCADIAN_KEYFRAMES: CircadianKeyframe[] = [
   },
 ];
 
+export type CameraPreset = 'front' | 'benthic' | 'corner' | 'canopy';
+
+export interface CameraPresetConfig {
+  id: CameraPreset;
+  name: string;
+  description: string;
+  position: THREE.Vector3;
+  lookAt: THREE.Vector3;
+}
+
+export const CAMERA_PRESETS: Record<CameraPreset, CameraPresetConfig> = {
+  front: {
+    id: 'front',
+    name: 'Frontal Showcase',
+    description: 'Classic framed desk view with balanced volumetric depth',
+    position: new THREE.Vector3(0, 1.8, 26.5),
+    lookAt: new THREE.Vector3(0, -0.2, 0),
+  },
+  benthic: {
+    id: 'benthic',
+    name: 'Benthic Macro',
+    description: 'Low seafloor angle looking up through dancing caustics & god rays',
+    position: new THREE.Vector3(-6.5, -4.2, 17.5),
+    lookAt: new THREE.Vector3(1.2, -2.8, -1.0),
+  },
+  corner: {
+    id: 'corner',
+    name: 'Corner Depth',
+    description: 'Angled perspective highlighting the seamless 3-sided enclosure',
+    position: new THREE.Vector3(15.5, 3.2, 21.0),
+    lookAt: new THREE.Vector3(-2.0, -0.6, -1.5),
+  },
+  canopy: {
+    id: 'canopy',
+    name: 'Surface Canopy',
+    description: 'Overhead perspective overlooking active surface ripples & plant tops',
+    position: new THREE.Vector3(0, 11.5, 17.0),
+    lookAt: new THREE.Vector3(0, -1.8, 0),
+  },
+};
+
+export interface WaterSurfaceRipple {
+  x: number;
+  z: number;
+  radius: number;
+  maxRadius: number;
+  amplitude: number;
+  speed: number;
+  decay: number;
+}
+
 export class AquariumSceneManager {
   public container: HTMLElement;
   public scene: THREE.Scene;
@@ -107,6 +164,7 @@ export class AquariumSceneManager {
 
   public boidSim: BoidSimulation4D;
   public floraSim: ProceduralFloraSimulation;
+  public ecologySim?: EcologySimulation;
 
   // Circadian Day-Night Cycle
   public dayNightCycle: DayNightCycleConfig = {
@@ -114,11 +172,21 @@ export class AquariumSceneManager {
     periodSeconds: 60.0, // 60 seconds per complete cycle
     currentPhase: 0.25, // Start at midday
   };
-  private backMat!: THREE.MeshBasicMaterial;
+  public waterAtmosphereMat!: THREE.ShaderMaterial;
+  public backdropOpacity: number = 0.82;
+  private backMat?: THREE.MeshBasicMaterial;
   private tmpColorB = new THREE.Color();
 
   // 2.5D optical parallax offset
   private targetCameraOffset: THREE.Vector2 = new THREE.Vector2(0, 0);
+
+  // Camera Viewport Presets
+  public activeCameraPreset: CameraPreset = 'front';
+  public onCameraPresetChange?: (preset: CameraPreset) => void;
+
+  // Interactive Water Surface Ripples
+  private activeSurfaceRipples: WaterSurfaceRipple[] = [];
+  private surfaceBasePositions?: Float32Array;
 
   // Scene elements
   public coralObjects!: CoralSceneObjects;
@@ -134,6 +202,8 @@ export class AquariumSceneManager {
   private ambientLight!: THREE.AmbientLight;
   private topAquariumLight!: THREE.DirectionalLight;
   private deskLampLight!: THREE.SpotLight;
+  private deskLampBulbMat!: THREE.MeshBasicMaterial;
+  private deskLampBeamMesh?: THREE.Mesh;
   private boidClusterLight!: THREE.PointLight;
   private substrateFillLight!: THREE.DirectionalLight;
   private volumetricGodRaysMesh!: THREE.Mesh;
@@ -181,6 +251,13 @@ export class AquariumSceneManager {
   private attrSpeciesIndex!: THREE.InstancedBufferAttribute;
   private attrBioluminescence!: THREE.InstancedBufferAttribute;
 
+  // Procedural Morphological & Posture Manager (Task 005)
+  public morphologyManager: BoidMorphologyManager = new BoidMorphologyManager(1000);
+  private attrMorphology!: THREE.InstancedBufferAttribute;
+  private attrSignature!: THREE.InstancedBufferAttribute;
+  private attrPosture!: THREE.InstancedBufferAttribute;
+  private attrWavePhase!: THREE.InstancedBufferAttribute;
+
   // Cached food flake geometry, material, and zero-allocation object pool
   private foodGeo: THREE.DodecahedronGeometry = new THREE.DodecahedronGeometry(0.22, 1);
   private foodMat: THREE.MeshStandardMaterial = new THREE.MeshStandardMaterial({
@@ -195,14 +272,21 @@ export class AquariumSceneManager {
   public microFaunaSim: MicroFaunaSimulation;
   public microFaunaRenderer: MicroFaunaRenderer;
 
+  // Environmental World Systems (Program Increment v0.0.1 - Task 003)
+  public particleSystem!: SuspendedParticleSystem;
+  public sedimentSystem!: SedimentPlumeSystem;
+  private processedAcousticEventIds: Set<string> = new Set();
+
   constructor(
     container: HTMLElement,
     boidSim: BoidSimulation4D,
-    floraSim: ProceduralFloraSimulation
+    floraSim: ProceduralFloraSimulation,
+    ecologySim?: EcologySimulation
   ) {
     this.container = container;
     this.boidSim = boidSim;
     this.floraSim = floraSim;
+    this.ecologySim = ecologySim;
 
     // 1. Scene & Renderer
     this.scene = new THREE.Scene();
@@ -244,6 +328,10 @@ export class AquariumSceneManager {
     this.initFireflyInstancing();
     this.initDynamicLighting();
     this.initVolumetricScattering();
+
+    // Initialize Environmental World Systems
+    this.particleSystem = new SuspendedParticleSystem(this.scene, 280);
+    this.sedimentSystem = new SedimentPlumeSystem(this.scene, 75);
 
     // Initialize micro-fauna system (crabs, snails, ghost shrimp, hydromedusae)
     this.microFaunaSim = new MicroFaunaSimulation(this.boidSim, this.floraSim);
@@ -301,42 +389,124 @@ export class AquariumSceneManager {
     shadowPad.position.set(0, -6.99, 0);
     this.scene.add(shadowPad);
 
-    // 3. Desk Lamp structure on the left side
+    // 3. Desk Lamp structure positioned comfortably outside the tank on the left desk surface
+    // (Tank left glass is at X = -14.2; base is set back at X = -19.2, Z = 1.8)
     const lampGroup = new THREE.Group();
-    lampGroup.position.set(-16.5, -6.8, 3.5);
+    lampGroup.position.set(-19.2, -6.8, 1.8);
 
     // Lamp base
-    const baseGeo = new THREE.CylinderGeometry(1.6, 1.8, 0.4, 24);
+    const baseGeo = new THREE.CylinderGeometry(1.5, 1.7, 0.4, 24);
     const brassMat = new THREE.MeshStandardMaterial({
-      color: 0xc8a463, // Brushed brass
+      color: 0xc8a463, // Brushed warm brass
       metalness: 0.85,
       roughness: 0.28,
+      side: THREE.DoubleSide,
     });
     const baseMesh = new THREE.Mesh(baseGeo, brassMat);
     lampGroup.add(baseMesh);
 
-    // Articulated lamp neck
-    const stemGeo = new THREE.CylinderGeometry(0.12, 0.12, 10.5, 12);
+    // Articulated lamp neck / stem (gentle tilt, staying well clear of tank)
+    const stemGeo = new THREE.CylinderGeometry(0.13, 0.13, 10.0, 12);
     const stemMesh = new THREE.Mesh(stemGeo, brassMat);
-    stemMesh.position.set(0, 5.2, 0);
-    stemMesh.rotation.z = -0.15;
+    stemMesh.position.set(0.3, 4.9, 0);
+    stemMesh.rotation.z = -0.06;
     lampGroup.add(stemMesh);
 
-    // Lamp shade angled toward aquarium
-    const shadeGeo = new THREE.ConeGeometry(1.5, 2.2, 24, 1, true);
+    // Swivel knuckle joint at the top of the neck
+    const jointGeo = new THREE.SphereGeometry(0.34, 16, 16);
+    const jointMesh = new THREE.Mesh(jointGeo, brassMat);
+    jointMesh.position.set(0.68, 9.85, 0);
+    lampGroup.add(jointMesh);
+
+    // Angled arm connecting knuckle joint to the lamp head socket
+    const armGeo = new THREE.CylinderGeometry(0.11, 0.11, 0.95, 12);
+    const armMesh = new THREE.Mesh(armGeo, brassMat);
+    armMesh.position.set(1.02, 9.72, -0.08);
+    armMesh.rotation.z = -Math.PI * 0.32;
+    armMesh.rotation.y = 0.18;
+    lampGroup.add(armMesh);
+
+    // Lamp Head Group:
+    // Anchored at socket (1.35, 9.6, -0.15) -> world position (-17.85, 2.8, 1.65)
+    // Perfectly positioned outside the aquarium glass with wide diffuse aim
+    const lampHeadGroup = new THREE.Group();
+    lampHeadGroup.position.set(1.35, 9.6, -0.15);
+    // Local target inside lampGroup (corresponds to world position -6.0, -1.5, 0.5)
+    lampHeadGroup.lookAt(new THREE.Vector3(13.2, 5.3, -1.3));
+
+    // Socket collar (attaches shade to the lamp arm)
+    const socketGeo = new THREE.CylinderGeometry(0.38, 0.44, 0.5, 20);
+    socketGeo.rotateX(Math.PI * 0.5);
+    socketGeo.translate(0, 0, -0.12);
+    const socketMesh = new THREE.Mesh(socketGeo, brassMat);
+    lampHeadGroup.add(socketMesh);
+
+    // Conical Lamp Shade:
+    // Narrow apex at socket (z=0, radius 0.44), smoothly widening to flared opening (z=1.8, radius 1.45)
+    // Shade rim ends at world X ≈ -16.18, leaving a clear gap of ~2.0 units from the aquarium glass!
+    const shadeGeo = new THREE.CylinderGeometry(0.44, 1.45, 1.8, 28, 1, true);
+    shadeGeo.rotateX(-Math.PI * 0.5);
+    shadeGeo.translate(0, 0, 0.9);
     const shadeMesh = new THREE.Mesh(shadeGeo, brassMat);
-    shadeMesh.position.set(1.4, 9.8, 0);
-    shadeMesh.rotation.z = -Math.PI * 0.42;
-    shadeMesh.rotation.y = 0.25;
-    lampGroup.add(shadeMesh);
+    lampHeadGroup.add(shadeMesh);
 
-    // Glowing warm bulb
-    const bulbGeo = new THREE.SphereGeometry(0.45, 16, 16);
-    const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffefc6 });
-    const bulbMesh = new THREE.Mesh(bulbGeo, bulbMat);
-    bulbMesh.position.set(1.6, 9.6, 0);
-    lampGroup.add(bulbMesh);
+    // Frosted lens diffuser at the rim of the shade (softens and diffuses outgoing light)
+    const diffuserGeo = new THREE.CircleGeometry(1.4, 24);
+    const diffuserMat = new THREE.MeshBasicMaterial({
+      color: 0xfff4dc,
+      transparent: true,
+      opacity: 0.45,
+      side: THREE.DoubleSide,
+    });
+    const diffuserMesh = new THREE.Mesh(diffuserGeo, diffuserMat);
+    diffuserMesh.position.set(0, 0, 1.78);
+    lampHeadGroup.add(diffuserMesh);
 
+    // Glowing warm bulb positioned inside the shade near the socket
+    const bulbGeo = new THREE.SphereGeometry(0.32, 16, 16);
+    this.deskLampBulbMat = new THREE.MeshBasicMaterial({ color: 0xffedd5 });
+    const bulbMesh = new THREE.Mesh(bulbGeo, this.deskLampBulbMat);
+    bulbMesh.position.set(0, 0, 0.65);
+    lampHeadGroup.add(bulbMesh);
+
+    // Soft, subtle atmospheric air haze emanating from the shade opening (dissolves gently in air outside glass)
+    const beamGeo = new THREE.CylinderGeometry(1.42, 3.2, 3.2, 24, 1, true);
+    beamGeo.rotateX(-Math.PI * 0.5);
+    beamGeo.translate(0, 0, 1.8 + 1.6); // Extends only 3.2 units through air, stopping outside the tank
+    const beamMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uColor: { value: new THREE.Color(0xffecd0) },
+        uIntensity: { value: 1.0 },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        varying vec2 vUv;
+        uniform vec3 uColor;
+        uniform float uIntensity;
+        void main() {
+          // Soft feathered radial and longitudinal air haze
+          float longitudinalFade = pow(1.0 - vUv.y, 1.8);
+          float radialEdge = abs(vUv.x - 0.5) * 2.0;
+          float radialFade = smoothstep(1.0, 0.15, radialEdge);
+          float alpha = longitudinalFade * radialFade * 0.07 * uIntensity;
+          gl_FragColor = vec4(uColor, alpha);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    this.deskLampBeamMesh = new THREE.Mesh(beamGeo, beamMat);
+    lampHeadGroup.add(this.deskLampBeamMesh);
+
+    lampGroup.add(lampHeadGroup);
     this.scene.add(lampGroup);
 
     // 4. Desk accessory: Aquarium field guide / notepad on desk right
@@ -350,6 +520,18 @@ export class AquariumSceneManager {
     book.rotation.y = -0.22;
     book.receiveShadow = true;
     this.scene.add(book);
+
+    // 5. Ambient Room Backdrop Wall behind the desk (softly visible through translucent backdrops)
+    const wallGeo = new THREE.PlaneGeometry(68, 36);
+    const wallMat = new THREE.MeshStandardMaterial({
+      color: 0x141b24, // Deep slate-charcoal architectural study wall
+      roughness: 0.92,
+      metalness: 0.04,
+    });
+    const wallMesh = new THREE.Mesh(wallGeo, wallMat);
+    wallMesh.position.set(0, 5.0, -14.2);
+    wallMesh.receiveShadow = true;
+    this.scene.add(wallMesh);
   }
 
   private initAquariumGlass() {
@@ -374,34 +556,30 @@ export class AquariumSceneManager {
     topCanopy.position.y = 7.2;
     this.scene.add(topCanopy);
 
-    // 2. Rear Dark Frosted Glass Backing
+    // 2. Volumetric Water Atmosphere Backing applied to all three non-camera sides of the tank:
+    // (Rear back wall, Left side wall, and Right side wall)
+    this.waterAtmosphereMat = createWaterVolumeBackingMaterial();
+
+    // A. Rear Backing Wall (Translucent volumetric water atmosphere)
     const backGeo = new THREE.PlaneGeometry(tankWidth, tankHeight);
-    this.backMat = new THREE.MeshBasicMaterial({
-      color: 0x05131f,
-    });
-    const backMesh = new THREE.Mesh(backGeo, this.backMat);
+    const backMesh = new THREE.Mesh(backGeo, this.waterAtmosphereMat);
     backMesh.position.z = -tankDepth * 0.5;
+    backMesh.renderOrder = -1;
     this.scene.add(backMesh);
 
-    // 3. Left and Right Glass Side Panels (Fast translucent standard material)
+    // B. Left and Right Side Walls (Enclosing the water volume with matching translucency)
     const sideGeo = new THREE.PlaneGeometry(tankDepth, tankHeight);
-    const sideMat = new THREE.MeshStandardMaterial({
-      color: 0xd0f0fd,
-      transparent: true,
-      opacity: 0.18,
-      roughness: 0.1,
-      metalness: 0.1,
-      depthWrite: false,
-    });
 
-    const leftSide = new THREE.Mesh(sideGeo, sideMat);
+    const leftSide = new THREE.Mesh(sideGeo, this.waterAtmosphereMat);
     leftSide.rotation.y = Math.PI / 2;
     leftSide.position.x = -tankWidth * 0.5;
+    leftSide.renderOrder = -1;
     this.scene.add(leftSide);
 
-    const rightSide = new THREE.Mesh(sideGeo, sideMat);
+    const rightSide = new THREE.Mesh(sideGeo, this.waterAtmosphereMat);
     rightSide.rotation.y = -Math.PI / 2;
     rightSide.position.x = tankWidth * 0.5;
+    rightSide.renderOrder = -1;
     this.scene.add(rightSide);
 
     // 4. Front Glass Pane (Hosts the procedural micro-flora canvas texture!)
@@ -422,14 +600,16 @@ export class AquariumSceneManager {
     this.frontGlassMesh.position.z = tankDepth * 0.5 + 0.05;
     this.scene.add(this.frontGlassMesh);
 
-    // 5. Water Surface Meniscus with animated wave displacement
-    const waterGeo = new THREE.PlaneGeometry(tankWidth, tankDepth, 32, 16);
+    // 5. Water Surface Meniscus with interactive wave displacement
+    const waterGeo = new THREE.PlaneGeometry(tankWidth, tankDepth, 64, 32);
+    this.surfaceBasePositions = new Float32Array(waterGeo.attributes.position.array);
     const waterMat = new THREE.MeshStandardMaterial({
       color: 0x3ac5ea,
       transparent: true,
-      opacity: 0.45,
-      roughness: 0.1,
-      metalness: 0.2,
+      opacity: 0.52,
+      roughness: 0.12,
+      metalness: 0.22,
+      depthWrite: false,
     });
     this.waterSurfaceMesh = new THREE.Mesh(waterGeo, waterMat);
     this.waterSurfaceMesh.rotation.x = -Math.PI / 2;
@@ -458,11 +638,22 @@ export class AquariumSceneManager {
     this.attrSpeciesIndex = new THREE.InstancedBufferAttribute(speciesIndices, 1);
     this.attrBioluminescence = new THREE.InstancedBufferAttribute(biolumVals, 1);
 
+    // Procedural Morphological Grammar Attributes (Task 005)
+    this.attrMorphology = new THREE.InstancedBufferAttribute(this.morphologyManager.attrMorphology, 4);
+    this.attrSignature = new THREE.InstancedBufferAttribute(this.morphologyManager.attrSignature, 4);
+    this.attrPosture = new THREE.InstancedBufferAttribute(this.morphologyManager.attrPosture, 4);
+    this.attrWavePhase = new THREE.InstancedBufferAttribute(this.morphologyManager.attrWavePhase, 1);
+
     fishGeo.setAttribute('aSwimPhase', this.attrSwimPhase);
     fishGeo.setAttribute('aSpeed', this.attrSpeed);
     fishGeo.setAttribute('aTemporalAlpha', this.attrTemporalAlpha);
     fishGeo.setAttribute('aSpeciesIndex', this.attrSpeciesIndex);
     fishGeo.setAttribute('aBioluminescence', this.attrBioluminescence);
+
+    fishGeo.setAttribute('aMorphology', this.attrMorphology);
+    fishGeo.setAttribute('aSignature', this.attrSignature);
+    fishGeo.setAttribute('aPosture', this.attrPosture);
+    fishGeo.setAttribute('aWavePhase', this.attrWavePhase);
 
     this.fishMesh.count = this.boidSim.boids.length;
     this.scene.add(this.fishMesh);
@@ -493,10 +684,10 @@ export class AquariumSceneManager {
     this.topAquariumLight.shadow.camera.bottom = -10;
     this.scene.add(this.topAquariumLight);
 
-    // 3. Warm Desk Lamp Spotlight (Shines warm light from the left onto desk & tank)
-    this.deskLampLight = new THREE.SpotLight(0xffdf99, 3.5, 38, Math.PI * 0.35, 0.45, 1.2);
-    this.deskLampLight.position.set(-14.9, 2.8, 3.5);
-    this.deskLampLight.target.position.set(-2.0, -3.0, 0);
+    // 3. Warm Desk Lamp Spotlight (Shines warm, soft diffuse light from outside the tank on the left)
+    this.deskLampLight = new THREE.SpotLight(0xffecd0, 1.5, 40, Math.PI * 0.42, 0.92, 1.6);
+    this.deskLampLight.position.set(-17.85, 2.8, 1.65);
+    this.deskLampLight.target.position.set(-6.0, -1.5, 0.5);
     this.deskLampLight.castShadow = false;
     this.scene.add(this.deskLampLight);
     this.scene.add(this.deskLampLight.target);
@@ -701,11 +892,17 @@ export class AquariumSceneManager {
 
   public toggleDeskLamp(): boolean {
     this.deskLampEnabled = !this.deskLampEnabled;
-    this.deskLampLight.intensity = this.deskLampEnabled ? 3.5 : 0.0;
-    this.fishMaterial.uniforms.uDeskLampIntensity.value = this.deskLampEnabled ? 1.2 : 0.0;
+    this.deskLampLight.intensity = this.deskLampEnabled ? 1.5 : 0.0;
+    this.fishMaterial.uniforms.uDeskLampIntensity.value = this.deskLampEnabled ? 0.5 : 0.0;
+    if (this.deskLampBulbMat) {
+      this.deskLampBulbMat.color.setHex(this.deskLampEnabled ? 0xffedd5 : 0x241d18);
+    }
+    if (this.deskLampBeamMesh) {
+      this.deskLampBeamMesh.visible = this.deskLampEnabled;
+    }
     this.renderer.shadowMap.needsUpdate = true;
     if (this.deskLampEnabled) {
-      this.boidSim.lightTarget = { x: -14.0, y: 3.5, z: 3.5, intensity: 1.4 };
+      this.boidSim.lightTarget = { x: -11.0, y: 1.5, z: 1.5, intensity: 1.1 };
     } else {
       this.boidSim.lightTarget = { x: 0, y: 5.5, z: 0, intensity: 0.9 };
     }
@@ -748,13 +945,16 @@ export class AquariumSceneManager {
           this.targetLookAt.set(0, -0.2, 0);
         }
       } else {
-        // Default 2.5D optical parallax
-        const targetCamX = this.targetCameraOffset.x;
-        const targetCamY = 1.8 + this.targetCameraOffset.y;
-        this.camera.position.x += (targetCamX - this.camera.position.x) * 0.04;
-        this.camera.position.y += (targetCamY - this.camera.position.y) * 0.04;
-        this.camera.position.z += (26.5 - this.camera.position.z) * 0.04;
-        this.targetLookAt.set(0, -0.2, 0);
+        // Camera Viewport Preset with smooth optical parallax
+        const preset = CAMERA_PRESETS[this.activeCameraPreset] || CAMERA_PRESETS.front;
+        const targetCamX = preset.position.x + this.targetCameraOffset.x;
+        const targetCamY = preset.position.y + this.targetCameraOffset.y;
+        const targetCamZ = preset.position.z;
+
+        this.camera.position.x += (targetCamX - this.camera.position.x) * 0.045;
+        this.camera.position.y += (targetCamY - this.camera.position.y) * 0.045;
+        this.camera.position.z += (targetCamZ - this.camera.position.z) * 0.045;
+        this.targetLookAt.copy(preset.lookAt);
       }
       this.currentLookAt.lerp(this.targetLookAt, 0.05);
       this.camera.lookAt(this.currentLookAt);
@@ -780,6 +980,10 @@ export class AquariumSceneManager {
     const boids = this.boidSim.boids;
     const boidCount = boids.length;
     this.fishMesh.count = boidCount;
+
+    // Update procedural morphological posture dynamics with multi-scalar hysteresis (Task 005)
+    const flowVec = this.ecologySim?.environment?.water?.flow;
+    this.morphologyManager.update(boids, dt, flowVec);
 
     const swimArr = this.attrSwimPhase.array as Float32Array;
     const speedArr = this.attrSpeed.array as Float32Array;
@@ -833,6 +1037,12 @@ export class AquariumSceneManager {
     this.attrTemporalAlpha.needsUpdate = true;
     this.attrSpeciesIndex.needsUpdate = true;
     this.attrBioluminescence.needsUpdate = true;
+
+    // Morphological attributes update
+    this.attrMorphology.needsUpdate = true;
+    this.attrSignature.needsUpdate = true;
+    this.attrPosture.needsUpdate = true;
+    this.attrWavePhase.needsUpdate = true;
     benchmarkEngine.markStage('instancedFish');
 
     // 3b. Update Micro-Firefly Swarm (Bioluminescent plankton instances)
@@ -876,9 +1086,60 @@ export class AquariumSceneManager {
     this.godRaysMaterial.uniforms.uSchoolActivity.value = this.boidSim.schoolActivity;
 
     // 5. Animate Plant Shader Materials (hydrodynamic current sway & caustics)
+    const proj = this.ecologySim
+      ? this.ecologySim.environment.getVisualProjection(this.ecologySim.observer.state)
+      : null;
+
+    // Update Volumetric Water Atmosphere shader
+    if (this.waterAtmosphereMat?.uniforms) {
+      this.waterAtmosphereMat.uniforms.uTime.value = elapsedTime;
+      if (proj) {
+        this.waterAtmosphereMat.uniforms.uTopColor.value.setRGB(
+          proj.waterVolume.topWaterColor[0],
+          proj.waterVolume.topWaterColor[1],
+          proj.waterVolume.topWaterColor[2]
+        );
+        this.waterAtmosphereMat.uniforms.uDeepColor.value.setRGB(
+          proj.waterVolume.deepWaterColor[0],
+          proj.waterVolume.deepWaterColor[1],
+          proj.waterVolume.deepWaterColor[2]
+        );
+        this.waterAtmosphereMat.uniforms.uTurbidity.value = proj.waterVolume.extinctionCoefficient * 4.0;
+        this.waterAtmosphereMat.uniforms.uClarity.value = Math.max(0.05, 1.0 - proj.waterVolume.extinctionCoefficient * 3.0);
+        this.waterAtmosphereMat.uniforms.uDepthHaze.value = proj.waterVolume.depthHazeDensity;
+        this.waterAtmosphereMat.uniforms.uCausticStrength.value = proj.waterVolume.causticStrength;
+      }
+    }
+
+    // Update Suspended Marine Snow / Particulates
+    if (this.particleSystem) {
+      const flow = proj ? proj.flow.flowVelocity : new Vector3D(0.08, -0.01, 0.0);
+      const turb = proj ? proj.flow.turbulence : 0.15;
+      const count = proj ? proj.particles.targetCount : 120;
+      const opacity = proj ? proj.particles.opacity : 0.45;
+      const sizeScale = proj ? proj.particles.sizeScale : 1.0;
+      this.particleSystem.update(dt, elapsedTime, flow, turb, count, opacity, sizeScale);
+    }
+
+    // Update Benthic Sediment Plumes
+    if (this.sedimentSystem) {
+      const flow = proj ? proj.flow.flowVelocity : new Vector3D(0.08, -0.01, 0.0);
+      this.sedimentSystem.update(dt, flow);
+    }
+
+    // Update plant materials with authoritative water flow and turbulence
     if (this.coralObjects && this.coralObjects.plantMaterials) {
+      const flow = proj ? proj.flow.flowVelocity : new Vector3D(0.08, -0.01, 0.0);
+      const turb = proj ? proj.flow.turbulence : 0.15;
       for (let i = 0; i < this.coralObjects.plantMaterials.length; i++) {
-        this.coralObjects.plantMaterials[i].uniforms.uTime.value = elapsedTime;
+        const mat = this.coralObjects.plantMaterials[i];
+        mat.uniforms.uTime.value = elapsedTime;
+        if (mat.uniforms.uWaterFlow) {
+          mat.uniforms.uWaterFlow.value.set(flow.x, flow.y, flow.z);
+        }
+        if (mat.uniforms.uWaterTurbulence) {
+          mat.uniforms.uWaterTurbulence.value = turb;
+        }
       }
     }
 
@@ -928,6 +1189,60 @@ export class AquariumSceneManager {
       this.coralObjects.bubbleSystem.geometry.attributes.position.needsUpdate = true;
     }
 
+    // 7b. Update Water Surface Meniscus & Interactive Ripples
+    if (this.waterSurfaceMesh && this.surfaceBasePositions) {
+      const posAttr = this.waterSurfaceMesh.geometry.attributes.position;
+      const count = posAttr.count;
+      const basePos = this.surfaceBasePositions;
+
+      // Advance active ripple fronts
+      for (let rIdx = this.activeSurfaceRipples.length - 1; rIdx >= 0; rIdx--) {
+        const r = this.activeSurfaceRipples[rIdx];
+        r.radius += r.speed * dt;
+        r.amplitude *= Math.exp(-r.decay * dt);
+        if (r.amplitude < 0.002 || r.radius > r.maxRadius) {
+          this.activeSurfaceRipples.splice(rIdx, 1);
+        }
+      }
+
+      const rippleCount = this.activeSurfaceRipples.length;
+      for (let i = 0; i < count; i++) {
+        const x = basePos[i * 3];
+        const y = basePos[i * 3 + 1];
+        const baseZ = basePos[i * 3 + 2];
+
+        // Ambient gentle harmonic drift
+        let disp = Math.sin(x * 0.75 + elapsedTime * 2.2) * 0.035 + Math.cos(y * 1.1 - elapsedTime * 1.8) * 0.025;
+
+        // Interactive radial ripples
+        for (let rIdx = 0; rIdx < rippleCount; rIdx++) {
+          const r = this.activeSurfaceRipples[rIdx];
+          const dx = x - r.x;
+          const dy = -y - r.z;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < r.radius + 2.2 && dist > r.radius - 2.2) {
+            const phase = (dist - r.radius) * 4.5;
+            disp += Math.sin(phase) * r.amplitude * Math.exp(-dist * 0.08);
+          }
+        }
+
+        posAttr.setZ(i, baseZ + disp);
+      }
+      posAttr.needsUpdate = true;
+      this.waterSurfaceMesh.geometry.computeVertexNormals();
+    }
+
+    // 7c. Update Benthic Floor Caustics & Substrate Modulation
+    if (this.coralObjects?.benthicCausticUniforms) {
+      this.coralObjects.benthicCausticUniforms.uTime.value = elapsedTime;
+      if (proj) {
+        this.coralObjects.benthicCausticUniforms.uCausticStrength.value = proj.waterVolume.causticStrength;
+        this.coralObjects.benthicCausticUniforms.uTurbidity.value = proj.signature.turbidity;
+        this.coralObjects.benthicCausticUniforms.uClarity.value = 1.0 - proj.signature.turbidity;
+        this.coralObjects.benthicCausticUniforms.uDetritus.value = proj.substrate.detritusDarkening;
+      }
+    }
+
     // 8. Update Food Pellet Meshes
     this.updateFoodPellets();
     benchmarkEngine.markStage('ambientObjects');
@@ -938,6 +1253,41 @@ export class AquariumSceneManager {
 
     this.microFaunaRenderer.update(dt);
     benchmarkEngine.markStage('microFaunaRender');
+
+    // 9b. Update Authoritative Acoustic Soundscape Projection (Task 004)
+    if (this.ecologySim) {
+      this.ecologySim.acousticProjection.listenerPosition = {
+        x: this.camera.position.x,
+        y: this.camera.position.y,
+        z: this.camera.position.z,
+      };
+
+      if (this.trackedOrganism) {
+        this.ecologySim.acousticProjection.attentionFocus = {
+          x: this.trackedOrganism.x,
+          y: this.trackedOrganism.y,
+          z: this.trackedOrganism.z,
+        };
+      } else {
+        this.ecologySim.acousticProjection.attentionFocus = null;
+      }
+
+      const mix = this.ecologySim.acousticProjection.projectMix(this.ecologySim.observer.state);
+      aquariumAudio.applyProjectedMix(mix);
+
+      // Play any newly derived discrete acoustic events
+      const recentAcousticEvents = this.ecologySim.acousticDerivation.getRecentEvents();
+      for (const evt of recentAcousticEvents) {
+        if (!this.processedAcousticEventIds.has(evt.id)) {
+          this.processedAcousticEventIds.add(evt.id);
+          const proj = this.ecologySim.acousticProjection.projectEvent(evt);
+          aquariumAudio.playSpatialEvent(proj);
+        }
+      }
+      if (this.processedAcousticEventIds.size > 200) {
+        this.processedAcousticEventIds.clear();
+      }
+    }
 
     // 10. Render Scene & Screen Space Displacement (SSD) Post-Processing Pipeline
     if (this.ssdPass && this.ssdPass.config.enabled) {
@@ -1038,6 +1388,12 @@ export class AquariumSceneManager {
           clampedZ + (Math.random() - 0.5) * 0.8
         );
       }
+
+      this.addWaterRipple(clampedX, clampedZ, 0.45);
+
+      if (this.ecologySim) {
+        this.ecologySim.dropFood(clampedX, clampedY, clampedZ, 0.5);
+      }
     }
   }
 
@@ -1063,6 +1419,11 @@ export class AquariumSceneManager {
       };
       // Micro-fauna reaction (crabs threaten, snails retract, shrimp caridoid dart!)
       this.microFaunaSim.startleNearby(target.x, target.y, target.z, 5.5);
+      this.sedimentSystem.spawnPuff(target.x, target.z, 0.85);
+      this.addWaterRipple(target.x, target.z, 0.75);
+      if (this.ecologySim) {
+        this.ecologySim.triggerDisturbance(0.9);
+      }
     }
   }
 
@@ -1078,10 +1439,20 @@ export class AquariumSceneManager {
       raycaster.ray.intersectPlane(plane, target);
       if (target) {
         this.microFaunaSim.dropSubstrateWafer(target.x, target.z);
+        this.sedimentSystem.spawnPuff(target.x, target.z, 0.6);
+        this.addWaterRipple(target.x, target.z, 0.55);
+        if (this.ecologySim) {
+          this.ecologySim.dropFood(target.x, -6.5, target.z, 0.8);
+        }
         return;
       }
     }
     this.microFaunaSim.dropSubstrateWafer();
+    this.sedimentSystem.spawnPuff(0, 0, 0.6);
+    this.addWaterRipple(0, 0, 0.55);
+    if (this.ecologySim) {
+      this.ecologySim.dropFood(0, -6.5, 0, 0.8);
+    }
   }
 
   public startleMicroFauna() {
@@ -1230,6 +1601,20 @@ export class AquariumSceneManager {
       else if (b.speed < 1.0) state = 'Gliding / Coasting';
       else if (b.curiosityTimer && b.curiosityTimer > 0) state = 'Investigating Reef';
 
+      const localAcoustic = this.ecologySim?.acousticField.sampleAt(b.x, b.y, b.z);
+      const signature = this.ecologySim?.acousticField.getSignature();
+      const perceivedAcousticDb = signature ? signature.estimated_loudness_db + ((localAcoustic?.ambient_gain ?? 0.25) - 0.25) * 10.0 : -36.0;
+      const recentEvents = this.ecologySim?.acousticDerivation.getRecentEvents() || [];
+      const nearbyEvent = recentEvents.find((e) => Math.hypot(e.location.x - b.x, e.location.y - b.y, e.location.z - b.z) < 9.0);
+
+      let acousticSensorySummary = 'Equilibrium: gentle laminar flow murmur';
+      if (b.isBursting) {
+        acousticSensorySummary = 'Lateral line: rapid hydrodynamic displacement / startle burst';
+      } else if (nearbyEvent) {
+        const dist = Math.hypot(nearbyEvent.location.x - b.x, nearbyEvent.location.y - b.y, nearbyEvent.location.z - b.z);
+        acousticSensorySummary = `Hearing ${nearbyEvent.source.replace(/_/g, ' ')} (${dist.toFixed(1)}m away)`;
+      }
+
       return {
         id,
         type: 'boid',
@@ -1251,6 +1636,24 @@ export class AquariumSceneManager {
         energy: Math.min(100, Math.round(65 + Math.sin(b.swimPhase) * 20)),
         alertness: b.isBursting ? 0.8 : 0.2,
         colorHex: cfg.regime === 'macro_pelagic' ? '#c084fc' : '#38bdf8',
+        perceivedAcousticDb: parseFloat(perceivedAcousticDb.toFixed(1)),
+        acousticSensorySummary,
+        isAcousticallyStartled: b.isBursting,
+        morphology: (() => {
+          const telem = this.morphologyManager.getBoidTelemetry(idx);
+          if (!telem) return undefined;
+          return {
+            aspect: telem.signature.aspect,
+            bodyDepth: telem.signature.bodyDepth,
+            taper: telem.signature.taper,
+            massDistribution: telem.signature.massDistribution,
+            flexibility: telem.signature.flexibility,
+            asymmetryBias: telem.signature.asymmetryBias,
+            curvature: parseFloat(telem.posture.curvature.toFixed(2)),
+            compression: parseFloat(telem.posture.compression.toFixed(2)),
+            propulsionTension: parseFloat(telem.posture.propulsionTension.toFixed(2)),
+          };
+        })(),
       };
     } else {
       const entity = this.microFaunaSim.entities.find((e) => e.id === id);
@@ -1260,6 +1663,10 @@ export class AquariumSceneManager {
         .split('_')
         .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
         .join(' ');
+
+      const localAcoustic = this.ecologySim?.acousticField.sampleAt(entity.x, entity.y, entity.z);
+      const signature = this.ecologySim?.acousticField.getSignature();
+      const perceivedAcousticDb = signature ? signature.estimated_loudness_db + ((localAcoustic?.ambient_gain ?? 0.25) - 0.25) * 10.0 : -40.0;
 
       return {
         id: entity.id,
@@ -1280,6 +1687,9 @@ export class AquariumSceneManager {
         energy: Math.round(entity.energy),
         alertness: parseFloat(entity.alertness.toFixed(2)),
         colorHex: '#2dd4bf',
+        perceivedAcousticDb: parseFloat(perceivedAcousticDb.toFixed(1)),
+        acousticSensorySummary: entity.alertness > 0.6 ? 'Vibration: alert to substrate shock' : 'Substrate vibration sensing: calm',
+        isAcousticallyStartled: entity.alertness > 0.6,
       };
     }
   }
@@ -1332,6 +1742,51 @@ export class AquariumSceneManager {
 
   public setTrackingCamera(enabled: boolean) {
     this.isTrackingCamera = enabled;
+  }
+
+  public addWaterRipple(worldX: number, worldZ: number, strength: number = 0.5): void {
+    if (this.activeSurfaceRipples.length > 12) {
+      this.activeSurfaceRipples.shift();
+    }
+    this.activeSurfaceRipples.push({
+      x: worldX,
+      z: worldZ,
+      radius: 0.2,
+      maxRadius: 20.0,
+      amplitude: Math.min(strength * 0.18, 0.25),
+      speed: 5.2,
+      decay: 1.5,
+    });
+  }
+
+  public setCameraPreset(preset: CameraPreset): void {
+    this.activeCameraPreset = preset;
+    this.isZenTour = false;
+    this.clearInspectedOrganism();
+    this.onCameraPresetChange?.(preset);
+  }
+
+  public cycleCameraPreset(): CameraPreset {
+    const order: CameraPreset[] = ['front', 'benthic', 'corner', 'canopy'];
+    const currIdx = order.indexOf(this.activeCameraPreset);
+    const nextPreset = order[(currIdx + 1) % order.length];
+    this.setCameraPreset(nextPreset);
+    return nextPreset;
+  }
+
+  public getCameraPreset(): CameraPreset {
+    return this.activeCameraPreset;
+  }
+
+  public setBackdropOpacity(opacity: number): void {
+    this.backdropOpacity = THREE.MathUtils.clamp(opacity, 0.1, 1.0);
+    if (this.waterAtmosphereMat?.uniforms?.uOpacity) {
+      this.waterAtmosphereMat.uniforms.uOpacity.value = this.backdropOpacity;
+    }
+  }
+
+  public getBackdropOpacity(): number {
+    return this.backdropOpacity;
   }
 
   /**
@@ -1388,8 +1843,17 @@ export class AquariumSceneManager {
     window.removeEventListener('resize', this.onResize);
     window.removeEventListener('pointermove', this.onPointerMove);
     this.microFaunaRenderer.destroy();
+    this.particleSystem.destroy(this.scene);
+    this.sedimentSystem.destroy(this.scene);
+    if (this.waterAtmosphereMat) {
+      this.waterAtmosphereMat.dispose();
+    }
     if (this.ssdPass) {
       this.ssdPass.dispose();
+    }
+    if (this.deskLampBeamMesh) {
+      this.deskLampBeamMesh.geometry.dispose();
+      (this.deskLampBeamMesh.material as THREE.Material).dispose();
     }
     this.foodGeo.dispose();
     this.foodMat.dispose();

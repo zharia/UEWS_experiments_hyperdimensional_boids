@@ -23,7 +23,13 @@ import { Vector3D } from '../../space/physical/Vector3D';
 import { DriveSystem } from '../drives/DriveSystem';
 import { MemorySystem } from '../memory/MemorySystem';
 import { RelationshipSystem } from '../relationships/RelationshipSystem';
-import { PerceivedAgent, PerceivedHazard, PerceivedResource } from '../perception/PerceptionSystem';
+import {
+  PerceivedAgent,
+  PerceivedHazard,
+  PerceivedResource,
+  PerceivedAcousticEvent,
+  PerceivedAcousticSensoryState,
+} from '../perception/PerceptionSystem';
 
 export type BehaviourType =
   | 'wander'
@@ -81,7 +87,9 @@ export class BehaviourSystem {
     perceivedHazards: PerceivedHazard[],
     simTime: number,
     migrationTarget?: { habitatId: string; position: Vector3D; suitabilityDelta: number },
-    canReproduce: boolean = false
+    canReproduce: boolean = false,
+    perceivedAcoustics: PerceivedAcousticEvent[] = [],
+    acousticSensoryState?: PerceivedAcousticSensoryState
   ): BehaviourCandidate[] {
     const candidates: BehaviourCandidate[] = [];
 
@@ -93,7 +101,27 @@ export class BehaviourSystem {
     const socialisation = drives.get('socialisation');
     const territoriality = drives.get('territoriality');
 
-    // 1. FLEE (survival imperative)
+    // 0. ACOUSTIC STARTLE REFLEX (immediate acoustic survival override)
+    // Fish detect pressure shockwaves and sudden vibrations via lateral line & otoliths
+    const startlingSounds = perceivedAcoustics.filter((a) => a.isStartling);
+    if (startlingSounds.length > 0) {
+      const topStartle = startlingSounds[0];
+      let away = selfPos.clone().sub(topStartle.position).normalize();
+      if (away.lengthSq() < 0.001) {
+        away = new Vector3D(0.5, 0.5, 0.5).normalize();
+      }
+      const escapeTarget = selfPos.clone().addScaled(away, 8.5);
+      const startleScore = 2.4 + topStartle.perceivedIntensity * 3.0; // Overrides routine cruising
+      candidates.push({
+        type: 'flee',
+        score: startleScore,
+        urgency: Math.min(1.0, 0.65 + topStartle.perceivedIntensity * 0.35),
+        targetPosition: escapeTarget,
+        reason: `Acoustic startle reflex: evading sudden ${topStartle.sourceType.replace(/_/g, ' ')} shock at (${topStartle.position.x.toFixed(1)}, ${topStartle.position.y.toFixed(1)}) (loudness ${(topStartle.perceivedIntensity * 100).toFixed(0)}%)`,
+      });
+    }
+
+    // 1. FLEE (survival imperative from visual hazards / fear drive)
     if (perceivedHazards.length > 0 || fear > 0.45) {
       let threatLevel = fear;
       let escapeDir = new Vector3D(0, 0, 0);
@@ -142,6 +170,19 @@ export class BehaviourSystem {
           reason: `Navigating to remembered food discovery site (salience: ${foodMem.strength.toFixed(2)})`,
         });
       }
+    }
+
+    // 2.3 ACOUSTIC FORAGING ATTRACTION (hearing food-drop impacts or nearby feeding clicks)
+    const attractiveSounds = perceivedAcoustics.filter((a) => a.isAttractive);
+    if (attractiveSounds.length > 0 && (hunger > 0.15 || curiosity > 0.35)) {
+      const topFoodSound = attractiveSounds[0];
+      candidates.push({
+        type: hunger > 0.3 ? 'feed' : 'investigate',
+        score: hunger * 1.9 + topFoodSound.perceivedIntensity * 1.4,
+        urgency: Math.min(1.0, hunger + 0.35),
+        targetPosition: topFoodSound.position,
+        reason: `Investigating acoustic feeding / surface impact sound at (${topFoodSound.position.x.toFixed(1)}, ${topFoodSound.position.y.toFixed(1)}) (perceived loudness: ${(topFoodSound.perceivedIntensity * 100).toFixed(0)}%)`,
+      });
     }
 
     // 2.5 MATE / COURTSHIP (reproductive imperative)

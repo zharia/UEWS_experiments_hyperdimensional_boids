@@ -10,8 +10,11 @@ import {
   Eye,
   FastForward,
   Fish,
+  Layers,
   Sparkles,
   Video,
+  Volume2,
+  Waves,
   X,
   Zap,
 } from 'lucide-react';
@@ -157,6 +160,80 @@ export const OrganismDossierCard: React.FC<OrganismDossierCardProps> = ({
           />
         </div>
       </div>
+
+      {/* Acoustic & Lateral Line Senses */}
+      {organism.perceivedAcousticDb !== undefined && (
+        <div className="mb-3 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/90 text-xs font-mono">
+          <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1">
+            <div className="flex items-center gap-1.5">
+              <Volume2 className="w-3 h-3 text-cyan-400" />
+              <span>Acoustic Reception</span>
+            </div>
+            <span
+              className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                organism.isAcousticallyStartled
+                  ? 'bg-rose-950 text-rose-300 border border-rose-800'
+                  : 'bg-slate-800 text-cyan-300'
+              }`}
+            >
+              {organism.perceivedAcousticDb} dB
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 text-[11px] text-slate-300">
+            <Waves className="w-3 h-3 text-teal-400 shrink-0" />
+            <span className="truncate" title={organism.acousticSensorySummary}>
+              {organism.acousticSensorySummary || 'Laminar acoustic equilibrium'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Morphological Signature & Posture Dynamics (Task 005) */}
+      {organism.morphology && (
+        <div className="mb-3 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/90 text-xs font-mono">
+          <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1.5">
+            <div className="flex items-center gap-1.5">
+              <Layers className="w-3 h-3 text-teal-400" />
+              <span>Morphological Signature & Posture</span>
+            </div>
+            <span className="text-[9px] text-teal-300 font-semibold">
+              Aspect {organism.morphology.aspect}x
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5 text-[10px] text-slate-300 mb-1.5">
+            <div className="bg-slate-900/80 p-1.5 rounded border border-slate-800 flex justify-between">
+              <span className="text-slate-500">Depth / Taper:</span>
+              <span className="text-slate-200">{organism.morphology.bodyDepth}x / {organism.morphology.taper}</span>
+            </div>
+            <div className="bg-slate-900/80 p-1.5 rounded border border-slate-800 flex justify-between">
+              <span className="text-slate-500">Asymmetry:</span>
+              <span className={organism.morphology.asymmetryBias >= 0 ? 'text-sky-300' : 'text-purple-300'}>
+                {organism.morphology.asymmetryBias >= 0 ? `+${organism.morphology.asymmetryBias}` : organism.morphology.asymmetryBias}
+              </span>
+            </div>
+            <div className="bg-slate-900/80 p-1.5 rounded border border-slate-800 flex justify-between">
+              <span className="text-slate-500">Flex / Tension:</span>
+              <span className="text-teal-300">{organism.morphology.flexibility}x / {(organism.morphology.propulsionTension * 100).toFixed(0)}%</span>
+            </div>
+            <div className="bg-slate-900/80 p-1.5 rounded border border-slate-800 flex justify-between">
+              <span className="text-slate-500">Axial Compress:</span>
+              <span className={organism.morphology.compression > 0 ? 'text-amber-300' : 'text-emerald-300'}>
+                {(organism.morphology.compression * 100).toFixed(0)}%
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center justify-between text-[10px] text-slate-400">
+            <span>Body Spine Curvature:</span>
+            <span className="text-amber-300 font-semibold">
+              {organism.morphology.curvature > 0.05
+                ? `Bend Right ${(organism.morphology.curvature * 100).toFixed(0)}%`
+                : organism.morphology.curvature < -0.05
+                ? `Bend Left ${(Math.abs(organism.morphology.curvature) * 100).toFixed(0)}%`
+                : 'Relaxed Cruising'}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Interactive controls */}
       <div className="flex items-center gap-1.5 pt-1">

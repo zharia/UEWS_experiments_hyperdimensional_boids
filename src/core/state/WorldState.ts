@@ -24,6 +24,7 @@ import { IAnticJSON } from '../../antics/antic/Antic';
 import { IPopulationManagerJSON } from '../../population/PopulationManager';
 import { IHabitatManagerJSON } from '../../ecology/habitats/HabitatManager';
 import { IEventLedgerJSON } from '../../history/EcologicalEventLedger';
+import { IEnvironmentalStateJSON } from '../../ecology/environment/EnvironmentalState';
 
 export interface IWorldStateV02 {
   schemaVersion: '0.1' | '0.2';
@@ -38,6 +39,7 @@ export interface IWorldStateV02 {
   populations?: IPopulationManagerJSON;
   habitats?: IHabitatManagerJSON;
   eventLedger?: IEventLedgerJSON;
+  environmentalState?: IEnvironmentalStateJSON;
   metadata?: {
     tankName: string;
     description?: string;

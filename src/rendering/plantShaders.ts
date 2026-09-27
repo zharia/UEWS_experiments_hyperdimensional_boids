@@ -51,6 +51,8 @@ export function createPlantShaderMaterial(params: PlantShaderParams): THREE.Shad
       uLightDir: { value: new THREE.Vector3(0.2, 1.0, 0.2).normalize() },
       uLightColor: { value: new THREE.Color(0xd6f4ff) },
       uAmbientColor: { value: new THREE.Color(0x13303d) },
+      uWaterFlow: { value: new THREE.Vector3(0.08, -0.01, 0.0) },
+      uWaterTurbulence: { value: 0.15 },
     },
     vertexShader: `
       varying vec3 vWorldPos;
@@ -64,6 +66,8 @@ export function createPlantShaderMaterial(params: PlantShaderParams): THREE.Shad
       uniform float uSwayStrength;
       uniform float uGrowthScale;
       uniform float uWiltAmount;
+      uniform vec3 uWaterFlow;
+      uniform float uWaterTurbulence;
 
       ${GLSL_SMOOTH_MATH}
 
@@ -92,13 +96,17 @@ export function createPlantShaderMaterial(params: PlantShaderParams): THREE.Shad
         // Base world position
         vec4 worldPos = modelMatrix * vec4(localPos, 1.0);
 
-        // Hydrodynamic water current sway (increases quadratically with height)
+        // Hydrodynamic water current sway coupled to authoritative environmental field
         float swayAmt = h * h * uSwayStrength * uGrowthScale;
-        float swayX = sin(uTime * 1.4 + worldPos.y * 0.35 + worldPos.z * 0.2) * swayAmt;
-        float swayZ = cos(uTime * 1.1 + worldPos.y * 0.3 + worldPos.x * 0.2) * (swayAmt * 0.7);
-        
-        worldPos.x += swayX;
-        worldPos.z += swayZ;
+        float swayX = sin(uTime * 1.4 + worldPos.y * 0.35 + worldPos.z * 0.2) * (1.0 + uWaterTurbulence * 2.0) * swayAmt;
+        float swayZ = cos(uTime * 1.1 + worldPos.y * 0.3 + worldPos.x * 0.2) * (1.0 + uWaterTurbulence * 2.0) * (swayAmt * 0.7);
+
+        // Direct displacement from authoritative laminar current vector
+        vec3 flowDisplacement = uWaterFlow * (h * h * 2.5);
+
+        worldPos.x += swayX + flowDisplacement.x;
+        worldPos.y += flowDisplacement.y * 0.3;
+        worldPos.z += swayZ + flowDisplacement.z;
 
         vWorldPos = worldPos.xyz;
         vNormal = normalize(mat3(modelMatrix) * normal);

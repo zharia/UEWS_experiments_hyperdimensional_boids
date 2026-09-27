@@ -19,11 +19,13 @@ interface ShortcutItem {
 
 const SHORTCUTS: ShortcutItem[] = [
   { keyLabel: 'Space', action: 'Toggle Simulation Play / Pause', category: 'Time & Physics' },
+  { keyLabel: 'T', action: 'Toggle 4D Time Toolbar (Expand / Collapse)', category: 'Time & Physics' },
   { keyLabel: 'I', action: 'Inspect & Select Organism Tool', category: 'Interaction' },
   { keyLabel: 'F', action: 'Feed Flakes Tool (Surface Pellets)', category: 'Interaction' },
   { keyLabel: 'W', action: 'Substrate Wafer Tool (Benthic Crabs)', category: 'Interaction' },
   { keyLabel: 'C', action: 'Clean Glass Scrubber Tool', category: 'Interaction' },
   { keyLabel: 'S', action: 'Stir Water Currents & Tap Glass', category: 'Interaction' },
+  { keyLabel: 'V', action: 'Cycle Camera Perspective (Frontal / Benthic / Corner / Canopy)', category: 'Camera & Visuals' },
   { keyLabel: 'Z', action: 'Toggle Ambient Zen Cinematic Tour', category: 'Camera & Visuals' },
   { keyLabel: 'P', action: 'Capture High-Res Photo Snapshot', category: 'Camera & Visuals' },
   { keyLabel: 'L', action: 'Toggle Wood Desk Reading Lamp', category: 'Lighting' },

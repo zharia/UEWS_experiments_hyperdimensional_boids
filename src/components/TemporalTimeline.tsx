@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useRef } from 'react';
-import { FastForward, Ghost, Pause, Play, RotateCcw } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { ChevronDown, ChevronUp, Clock, FastForward, Ghost, Pause, Play, RotateCcw } from 'lucide-react';
 import { BoidSimulation4D } from '../simulation/boids4D';
 import { aquariumAudio } from '../audio/aquariumAudio';
 
@@ -18,6 +18,8 @@ interface TemporalTimelineProps {
   onTogglePlay: (dir: number) => void;
   onSetSpeed: (speed: number) => void;
   onToggleEchoes: () => void;
+  isExpanded?: boolean;
+  onToggleExpanded?: (expanded?: boolean) => void;
 }
 
 export const TemporalTimeline: React.FC<TemporalTimelineProps> = ({
@@ -30,7 +32,19 @@ export const TemporalTimeline: React.FC<TemporalTimelineProps> = ({
   onTogglePlay,
   onSetSpeed,
   onToggleEchoes,
+  isExpanded: controlledExpanded,
+  onToggleExpanded,
 }) => {
+  const [internalExpanded, setInternalExpanded] = useState<boolean>(false);
+  const isExpanded = controlledExpanded !== undefined ? controlledExpanded : internalExpanded;
+
+  const setExpanded = (next: boolean) => {
+    if (onToggleExpanded) {
+      onToggleExpanded(next);
+    }
+    setInternalExpanded(next);
+  };
+
   const speeds = [3.0, 6.0, 12.0, 24.0];
   const lastChimeRef = useRef<number>(0);
 
@@ -50,13 +64,82 @@ export const TemporalTimeline: React.FC<TemporalTimelineProps> = ({
     }
   };
 
+  // Collapsed compact capsule view
+  if (!isExpanded) {
+    return (
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 group bg-slate-900/90 backdrop-blur-md rounded-full px-3.5 py-1.5 border border-slate-700/70 shadow-xl flex items-center gap-3 hover:border-cyan-500/50 hover:bg-slate-900/95 transition-all select-none">
+        {/* Clickable pill trigger */}
+        <button
+          onClick={() => setExpanded(true)}
+          title="Expand 4D Time Toolbar (T)"
+          className="flex items-center gap-2 cursor-pointer text-left focus:outline-none"
+        >
+          <div className="w-5 h-5 rounded-full bg-cyan-950/80 border border-cyan-800/80 flex items-center justify-center text-cyan-400 group-hover:scale-105 transition-transform">
+            <Clock className="w-3 h-3 text-cyan-400" />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-mono font-medium text-slate-300 group-hover:text-white transition-colors">
+              4D Time:
+            </span>
+            <span className="text-[12px] font-mono font-semibold text-cyan-300">
+              {currentTimeW.toFixed(1)}&tau;
+            </span>
+          </div>
+          {/* Mini status indicator */}
+          <span
+            className={`text-[9px] font-mono px-1.5 py-0.5 rounded-full uppercase tracking-wider font-semibold border ${
+              timeDirection === 0
+                ? 'bg-amber-950/60 text-amber-300 border-amber-800/60'
+                : timeDirection < 0
+                ? 'bg-purple-950/60 text-purple-300 border-purple-800/60'
+                : 'bg-cyan-950/60 text-cyan-300 border-cyan-800/60'
+            }`}
+          >
+            {timeDirection === 0 ? 'Paused' : timeDirection < 0 ? 'Reverse' : 'Forward'}
+          </span>
+        </button>
+
+        {/* Quick Play/Pause & Expand triggers */}
+        <div className="flex items-center gap-1.5 border-l border-slate-700/60 pl-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handlePlayClick(timeDirection === 0 ? 1 : 0);
+            }}
+            title={timeDirection === 0 ? 'Resume 4D Time Flow' : 'Pause 4D Time Flow'}
+            className="p-1 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer"
+          >
+            {timeDirection === 0 ? (
+              <Play className="w-3 h-3 fill-current" />
+            ) : (
+              <Pause className="w-3 h-3" />
+            )}
+          </button>
+
+          <button
+            onClick={() => setExpanded(true)}
+            title="Expand 4D Time Toolbar (T)"
+            className="p-1 rounded-full bg-slate-800/80 hover:bg-cyan-950 text-slate-400 hover:text-cyan-300 transition-colors cursor-pointer flex items-center gap-1 pl-1.5 pr-2"
+          >
+            <ChevronUp className="w-3.5 h-3.5" />
+            <span className="text-[10px] font-mono font-medium">Controls</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Expanded full toolbar view
   return (
-    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 w-[92%] max-w-2xl bg-slate-900/85 backdrop-blur-md rounded-2xl p-3 border border-slate-700/60 shadow-2xl flex flex-col gap-2">
-      {/* Top row: Label, Time scrub slider, Value */}
+    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 w-[92%] max-w-2xl bg-slate-900/90 backdrop-blur-md rounded-2xl p-3 border border-slate-700/70 shadow-2xl flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-150">
+      {/* Top row: Label, Time scrub slider, Value, Collapse button */}
       <div className="flex items-center gap-3">
-        <span className="text-[11px] font-mono text-cyan-400 font-semibold tracking-wider uppercase whitespace-nowrap">
-          4D Time Slice
-        </span>
+        <div className="flex items-center gap-1.5">
+          <Clock className="w-3.5 h-3.5 text-cyan-400" />
+          <span className="text-[11px] font-mono text-cyan-400 font-semibold tracking-wider uppercase whitespace-nowrap">
+            4D Time Slice
+          </span>
+        </div>
 
         {/* Temporal Scrubber */}
         <div className="relative flex-1 flex items-center">
@@ -79,9 +162,18 @@ export const TemporalTimeline: React.FC<TemporalTimelineProps> = ({
           />
         </div>
 
-        <span className="text-xs font-mono text-cyan-300 w-12 text-right">
+        <span className="text-xs font-mono text-cyan-300 w-12 text-right font-medium">
           {currentTimeW.toFixed(1)}&tau;
         </span>
+
+        {/* Collapse button */}
+        <button
+          onClick={() => setExpanded(false)}
+          title="Collapse 4D Time Toolbar (T)"
+          className="p-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+        >
+          <ChevronDown className="w-4 h-4" />
+        </button>
       </div>
 
       {/* Bottom row: Playback transport & temporal modes */}

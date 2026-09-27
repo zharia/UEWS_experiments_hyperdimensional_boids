@@ -5,41 +5,41 @@
 
 import * as THREE from 'three';
 import { SPECIES_CONFIGS } from '../simulation/species';
+import { MorphologicalGrammar } from '../morphology/MorphologicalGrammar';
 
+/**
+ * Organismic Base Spindle Geometry (Task 005).
+ *
+ * Replaces anatomical fish geometry with a smooth, neutral organismic spindle
+ * that serves as a canvas for the procedural morphological grammar.
+ *
+ * Invariant:
+ *   "Fishiness without fish; organismic expression without anatomical simulation."
+ *   Zero eyes, zero scales, zero explicit fin meshes.
+ */
 export function createFishGeometry(): THREE.BufferGeometry {
-  // Create a streamlined fish geometry with body, dorsal fin, caudal fin (tail), and pectoral fins
   const length = 1.6;
-  const segmentsX = 14;
-  const segmentsRadial = 12;
+  const segmentsX = 24;
+  const segmentsRadial = 16;
 
-  // Build sleek spindle body
-  const bodyGeo = new THREE.CylinderGeometry(0.24, 0.08, length, segmentsRadial, segmentsX);
-  bodyGeo.rotateZ(Math.PI / 2); // Align head towards +X, tail towards -X
+  // Base neutral spindle cylinder along X axis (+X anterior, -X posterior)
+  const bodyGeo = new THREE.CylinderGeometry(0.24, 0.06, length, segmentsRadial, segmentsX);
+  bodyGeo.rotateZ(Math.PI / 2);
 
-  // Shape the body: tapered nose at +X, thickest at X = +0.2, tapered at -X (tail peduncle)
   const pos = bodyGeo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
     const y = pos.getY(i);
     const z = pos.getZ(i);
 
-    // Normalized progress along fish spine: 0 (tail -0.8) to 1 (head +0.8)
+    // Spine parameter: 0 at posterior (-0.8), 1 at anterior (+0.8)
     const t = Math.max(0, Math.min(1, (x + length * 0.5) / length));
 
-    // Body profile curve
-    const sinVal = Math.max(0, Math.sin(t * Math.PI));
-    let radiusFactor = sinVal;
-    if (t > 0.7) {
-      // Snout taper (strictly non-negative base avoids NaN in Math.pow)
-      radiusFactor = Math.pow(sinVal, 0.7);
-    }
-
-    // Laterally compressed (fish are taller than they are wide)
-    const scaleY = 1.35;
-    const scaleZ = 0.68;
-
-    pos.setXYZ(i, x, y * radiusFactor * scaleY, z * radiusFactor * scaleZ);
+    // Smooth baseline spindle envelope
+    const envelope = Math.max(0.12, Math.sin(t * Math.PI));
+    pos.setXYZ(i, x, y * envelope, z * envelope);
   }
+
   bodyGeo.computeVertexNormals();
   bodyGeo.computeBoundingSphere();
 
@@ -47,23 +47,24 @@ export function createFishGeometry(): THREE.BufferGeometry {
 }
 
 export function createFishShaderMaterial(): THREE.ShaderMaterial {
-  // Pass species colors as uniform arrays
   const speciesBodyColors: THREE.Vector3[] = [];
   const speciesStripeColors: THREE.Vector3[] = [];
   const speciesBiolumColors: THREE.Vector3[] = [];
 
-  SPECIES_CONFIGS.forEach(s => {
+  SPECIES_CONFIGS.forEach((s) => {
     speciesBodyColors.push(new THREE.Vector3(s.bodyColor[0], s.bodyColor[1], s.bodyColor[2]));
     speciesStripeColors.push(new THREE.Vector3(s.stripeColor[0], s.stripeColor[1], s.stripeColor[2]));
     speciesBiolumColors.push(new THREE.Vector3(s.bioluminescentColor[0], s.bioluminescentColor[1], s.bioluminescentColor[2]));
   });
 
+  const grammarGLSL = MorphologicalGrammar.getGLSLGrammarFunction();
+
   const material = new THREE.ShaderMaterial({
     uniforms: {
       uTime: { value: 0 },
-      uDeskLampPos: { value: new THREE.Vector3(-15.0, 10.0, 4.0) },
-      uDeskLampColor: { value: new THREE.Color(0xffe8bd) },
-      uDeskLampIntensity: { value: 1.2 },
+      uDeskLampPos: { value: new THREE.Vector3(-17.85, 2.8, 1.65) },
+      uDeskLampColor: { value: new THREE.Color(0xffecd0) },
+      uDeskLampIntensity: { value: 0.5 },
       uWaterColor: { value: new THREE.Color(0x0c3b52) },
       uCausticStrength: { value: 0.8 },
       uSchoolCenter: { value: new THREE.Vector3(0, 0, 0) },
@@ -72,7 +73,10 @@ export function createFishShaderMaterial(): THREE.ShaderMaterial {
       uSpeciesBiolumColors: { value: speciesBiolumColors },
     },
     vertexShader: `
-      attribute float aSwimPhase;
+      attribute vec4 aMorphology; // aspect, bodyDepth, taper, massDistribution
+      attribute vec4 aSignature;  // flexibility, posteriorExpression, surfaceComplexity, asymmetryBias
+      attribute vec4 aPosture;    // curvature, compression, twist, propulsionTension
+      attribute float aWavePhase;
       attribute float aSpeed;
       attribute float aTemporalAlpha;
       attribute float aSpeciesIndex;
@@ -85,37 +89,39 @@ export function createFishShaderMaterial(): THREE.ShaderMaterial {
       varying float vSpeciesIndex;
       varying float vBioluminescence;
       varying vec3 vLocalPos;
+      varying float vSpineT;
+      varying float vTension;
 
       uniform float uTime;
+
+      ${grammarGLSL}
 
       void main() {
         vSpeciesIndex = aSpeciesIndex;
         vTemporalAlpha = aTemporalAlpha;
         vBioluminescence = aBioluminescence;
-        vLocalPos = position;
+        vTension = aPosture.w;
 
-        // Realistic undulatory spine wave on GPU!
-        // Head is at +X, tail is at -X. Waves propagate from head to tail.
-        vec3 deformedPos = position;
+        float baseLength = 1.6;
+        vSpineT = clamp((position.x + baseLength * 0.5) / baseLength, 0.0, 1.0);
 
-        // Tail factor: 0 at head (+0.8), up to 1.0 at tail (-0.8)
-        float tailFactor = clamp((-position.x + 0.5) / 1.3, 0.0, 1.0);
-        tailFactor = pow(tailFactor, 1.6);
+        // Execute procedural morphological grammar on vertex
+        vec3 deformedPos = applyMorphologicalGrammar(position, aMorphology, aSignature, aPosture, aWavePhase);
+        vLocalPos = deformedPos;
 
-        // Sinusoidal lateral displacement (Z-axis of fish local coordinate)
-        float wave = sin(aSwimPhase - position.x * 3.8);
-        float amplitude = 0.28 * clamp(aSpeed * 0.28, 0.5, 1.4);
-        deformedPos.z += wave * tailFactor * amplitude;
+        // Accurate numerical normal evaluation along deformed surface
+        float eps = 0.025;
+        vec3 dX = applyMorphologicalGrammar(position + vec3(eps, 0.0, 0.0), aMorphology, aSignature, aPosture, aWavePhase) -
+                  applyMorphologicalGrammar(position - vec3(eps, 0.0, 0.0), aMorphology, aSignature, aPosture, aWavePhase);
+        vec3 dY = applyMorphologicalGrammar(position + vec3(0.0, eps, 0.0), aMorphology, aSignature, aPosture, aWavePhase) -
+                  applyMorphologicalGrammar(position - vec3(0.0, eps, 0.0), aMorphology, aSignature, aPosture, aWavePhase);
+        
+        vec3 deformedNormal = normalize(cross(dX, dY));
+        if (dot(deformedNormal, normal) < 0.0) {
+          deformedNormal = -deformedNormal;
+        }
 
-        // Slight yaw/head counter-wag
-        deformedPos.z += sin(aSwimPhase * 0.5) * (1.0 - tailFactor) * 0.04;
-
-        // Transform normal
-        vec3 deformedNormal = normal;
-        deformedNormal.z += cos(aSwimPhase - position.x * 3.8) * tailFactor * 0.5;
-        deformedNormal = normalize(deformedNormal);
-
-        // Apply instance transform
+        // Apply instance transform matrix
         vec4 worldPos = instanceMatrix * vec4(deformedPos, 1.0);
         vWorldPosition = worldPos.xyz;
 
@@ -135,6 +141,8 @@ export function createFishShaderMaterial(): THREE.ShaderMaterial {
       varying float vSpeciesIndex;
       varying float vBioluminescence;
       varying vec3 vLocalPos;
+      varying float vSpineT;
+      varying float vTension;
 
       uniform float uTime;
       uniform vec3 uDeskLampPos;
@@ -149,7 +157,6 @@ export function createFishShaderMaterial(): THREE.ShaderMaterial {
       uniform vec3 uSpeciesBiolumColors[6];
 
       void main() {
-        // Discard completely out-of-phase boids
         if (vTemporalAlpha < 0.01) {
           discard;
         }
@@ -159,71 +166,70 @@ export function createFishShaderMaterial(): THREE.ShaderMaterial {
         vec3 stripeColor = uSpeciesStripeColors[spIdx];
         vec3 biolumColor = uSpeciesBiolumColors[spIdx];
 
-        // Lateral iridescent stripe pattern
-        float stripeMask = smoothstep(0.18, 0.02, abs(vLocalPos.y));
-        // Dorsal darker gradient
-        float dorsal = smoothstep(-0.2, 0.3, vLocalPos.y);
+        // ---------------------------------------------------------------------
+        // ORGANISMIC MATERIAL & COUNTER-SHADING (Zero eyes, zero scales)
+        // ---------------------------------------------------------------------
+        // Natural counter-shading: dorsal (upper) surface is deeper/darker,
+        // ventral (lower) surface is slightly paler.
+        float dorsal = smoothstep(-0.15, 0.25, vLocalPos.y);
+        float ventral = smoothstep(0.15, -0.25, vLocalPos.y);
 
-        vec3 fishColor = mix(baseColor, stripeColor, stripeMask);
-        fishColor = mix(fishColor, baseColor * 0.45, dorsal * 0.5);
+        // Longitudinal lateral line canal (fluid sensory pore channel)
+        float lateralCanal = smoothstep(0.12, 0.02, abs(vLocalPos.y));
 
-        // Eye dots near snout (X > 0.45, abs(Z) > 0.08, Y near 0.05)
-        if (vLocalPos.x > 0.42 && abs(vLocalPos.z) > 0.07 && abs(vLocalPos.y - 0.04) < 0.08) {
-          fishColor = vec3(0.08, 0.08, 0.1); // pupil
-        }
+        vec3 organismColor = mix(baseColor, stripeColor, lateralCanal * 0.75);
+        organismColor = mix(organismColor, baseColor * 0.50, dorsal * 0.45);
+        organismColor = mix(organismColor, baseColor * 1.25, ventral * 0.30);
 
         vec3 normal = normalize(vNormal);
         vec3 viewDir = normalize(vViewPosition);
 
         // Ambient aquatic lighting
-        vec3 ambient = uWaterColor * 0.8 + vec3(0.08, 0.12, 0.15);
+        vec3 ambient = uWaterColor * 0.85 + vec3(0.08, 0.12, 0.16);
 
-        // Overhead water sunlight / God ray illumination
-        vec3 sunDir = normalize(vec3(0.2, 1.0, 0.3));
+        // Directional overhead sun rays
+        vec3 sunDir = normalize(vec3(0.25, 1.0, 0.25));
         float NdotL = max(dot(normal, sunDir), 0.0);
         vec3 diffuse = NdotL * vec3(0.65, 0.85, 0.95);
 
-        // Caustic ripple highlight projected from water surface
-        float caustic = sin(vWorldPosition.x * 2.0 + uTime * 2.5) *
-                        sin(vWorldPosition.z * 2.2 + uTime * 2.0) *
-                        sin((vWorldPosition.x + vWorldPosition.z) * 1.5 - uTime * 1.8);
-        caustic = pow(max(caustic, 0.0), 3.0) * uCausticStrength * 0.6;
-        diffuse += vec3(0.3, 0.7, 0.9) * caustic;
+        // Dynamic surface caustic ripples
+        float caustic = sin(vWorldPosition.x * 2.1 + uTime * 2.4) *
+                        sin(vWorldPosition.z * 2.3 + uTime * 2.0) *
+                        sin((vWorldPosition.x + vWorldPosition.z) * 1.6 - uTime * 1.7);
+        caustic = pow(max(caustic, 0.0), 3.0) * uCausticStrength * 0.55;
+        diffuse += vec3(0.35, 0.75, 0.95) * caustic;
 
-        // Desk lamp directional light
+        // Desk lamp soft diffuse lighting
         vec3 lampDir = normalize(uDeskLampPos - vWorldPosition);
         float lampDist = length(uDeskLampPos - vWorldPosition);
         float lampAtten = 1.0 / (1.0 + lampDist * 0.05);
-        float lampNdotL = max(dot(normal, lampDir), 0.0);
-        vec3 lampDiffuse = lampNdotL * uDeskLampColor * uDeskLampIntensity * lampAtten * 0.8;
+        float lampWrap = max((dot(normal, lampDir) + 0.4) / 1.4, 0.0);
+        vec3 lampDiffuse = pow(lampWrap, 1.3) * uDeskLampColor * uDeskLampIntensity * lampAtten * 0.6;
 
-        // Fresnel edge glow & iridescent scale sheen
-        float fresnel = pow(1.0 - max(dot(normal, viewDir), 0.0), 2.5);
-        vec3 rim = fresnel * (baseColor * 0.8 + vec3(0.2, 0.4, 0.6));
+        // Organic translucent edge / Fresnel rim glow
+        float fresnel = pow(1.0 - max(dot(normal, viewDir), 0.0), 2.2);
+        vec3 rim = fresnel * (baseColor * 0.85 + vec3(0.2, 0.45, 0.65));
 
-        // Dynamic Bioluminescence
-        float biolumFactor = vBioluminescence * (0.4 + 0.6 * sin(uTime * 4.0 + vWorldPosition.x));
-        vec3 emission = biolumColor * biolumFactor * (stripeMask * 1.4 + fresnel * 0.6);
+        // Lateral canal bioluminescent glow (pulsing gently with tension and time)
+        float biolumPulse = vBioluminescence * (0.45 + 0.55 * sin(uTime * 3.5 + vWorldPosition.x * 0.8));
+        vec3 emission = biolumColor * biolumPulse * (lateralCanal * 1.5 + fresnel * 0.5);
 
-        // Combine lit color
-        vec3 finalColor = fishColor * (ambient + diffuse + lampDiffuse) + rim + emission;
+        // Final lit color
+        vec3 finalColor = organismColor * (ambient + diffuse + lampDiffuse) + rim + emission;
 
-        // 4D TEMPORAL TRANSITION SHIMMER & CHROMATIC ABERRATION:
-        // When fading across the 4th dimension temporal hyperplane (vTemporalAlpha < 0.9)
+        // 4D Temporal phase dispersion shimmer
         if (vTemporalAlpha < 0.95) {
           float phaseFactor = 1.0 - vTemporalAlpha;
-          // Quantum temporal dispersion: cyan & magenta split
-          finalColor.r += phaseFactor * 0.35 * sin(uTime * 8.0 + vWorldPosition.y * 3.0);
-          finalColor.b += phaseFactor * 0.45 * cos(uTime * 8.0 + vWorldPosition.x * 3.0);
-          finalColor += vec3(0.1, 0.25, 0.35) * fresnel * phaseFactor * 2.0;
+          finalColor.r += phaseFactor * 0.30 * sin(uTime * 7.0 + vWorldPosition.y * 3.0);
+          finalColor.b += phaseFactor * 0.40 * cos(uTime * 7.0 + vWorldPosition.x * 3.0);
+          finalColor += vec3(0.12, 0.28, 0.38) * fresnel * phaseFactor * 2.0;
         }
 
-        // Temporal alpha fade
         gl_FragColor = vec4(finalColor, vTemporalAlpha);
       }
     `,
     transparent: true,
-    depthWrite: false, // Prevents temporal fade sort artifacts
+    depthWrite: false,
     blending: THREE.NormalBlending,
     side: THREE.DoubleSide,
   });

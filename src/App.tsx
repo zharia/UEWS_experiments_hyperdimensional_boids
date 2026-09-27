@@ -6,7 +6,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { BoidSimulation4D } from './simulation/boids4D';
 import { ProceduralFloraSimulation } from './simulation/flora';
-import { AquariumSceneManager } from './rendering/aquariumScene';
 import { DeskHeader } from './components/DeskHeader';
 import { TemporalTimeline } from './components/TemporalTimeline';
 import { AquariumControls } from './components/AquariumControls';
@@ -17,6 +16,7 @@ import { EcosystemInspectorModal } from './components/EcosystemInspectorModal';
 import { OrganismDossierCard } from './components/OrganismDossierCard';
 import { ShortcutsHelpModal } from './components/ShortcutsHelpModal';
 import { EcologySimulation } from './simulation/EcologySimulation';
+import { AquariumSceneManager, CameraPreset, CAMERA_PRESETS } from './rendering/aquariumScene';
 import { InspectedOrganism, InteractionTool, LightingPreset, SimulationStats } from './types';
 
 export default function App() {
@@ -32,6 +32,7 @@ export default function App() {
   const [currentTool, setCurrentTool] = useState<InteractionTool>('feed');
   const [lightingPreset, setLightingPreset] = useState<LightingPreset>('daylight');
   const [deskLampOn, setDeskLampOn] = useState<boolean>(true);
+  const [isTimeToolbarExpanded, setIsTimeToolbarExpanded] = useState<boolean>(false);
   const [currentTimeW, setCurrentTimeW] = useState<number>(50.0);
   const [timeDirection, setTimeDirection] = useState<number>(1);
   const [timeSpeed, setTimeSpeed] = useState<number>(6.0);
@@ -45,7 +46,22 @@ export default function App() {
   const [inspectedOrganism, setInspectedOrganism] = useState<InspectedOrganism | null>(null);
   const [isTrackingCamera, setIsTrackingCamera] = useState<boolean>(true);
   const [isZenTour, setIsZenTour] = useState<boolean>(false);
+  const [activeCameraPreset, setActiveCameraPreset] = useState<CameraPreset>('front');
   const [snapshotFlash, setSnapshotFlash] = useState<boolean>(false);
+
+  // HUD Quick Hotkey Feedback Toast
+  const [hotkeyToast, setHotkeyToast] = useState<{ key: string; label: string } | null>(null);
+  const toastTimeoutRef = useRef<number | null>(null);
+
+  const showHotkeyFeedback = (key: string, label: string) => {
+    if (toastTimeoutRef.current) {
+      window.clearTimeout(toastTimeoutRef.current);
+    }
+    setHotkeyToast({ key, label });
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setHotkeyToast(null);
+    }, 1800);
+  };
 
   // Telemetry stats
   const [stats, setStats] = useState<SimulationStats>({
@@ -58,7 +74,7 @@ export default function App() {
     currentTimeW: 50.0,
     timeDirection: 1,
     timeSpeed: 6.0,
-    algaeCoverage: 18,
+    algaeCoverage: 0,
     foodCount: 0,
     kuramotoSync: 0.85,
     dayNightPhase: 0.25,
@@ -83,13 +99,17 @@ export default function App() {
     const manager = new AquariumSceneManager(
       canvasContainerRef.current,
       boidSim,
-      floraSim
+      floraSim,
+      ecologySim
     );
     manager.onOrganismSelect = (org) => {
       setInspectedOrganism(org);
       if (org) {
         setCurrentTool('inspect');
       }
+    };
+    manager.onCameraPresetChange = (preset) => {
+      setActiveCameraPreset(preset);
     };
     setSceneManager(manager);
 
@@ -200,6 +220,14 @@ export default function App() {
     }
   };
 
+  const handleCycleCameraPreset = () => {
+    if (sceneManager) {
+      const next = sceneManager.cycleCameraPreset();
+      setActiveCameraPreset(next);
+      setIsZenTour(false);
+    }
+  };
+
   const handleCaptureSnapshot = () => {
     setSnapshotFlash(true);
     setTimeout(() => setSnapshotFlash(false), 220);
@@ -219,44 +247,180 @@ export default function App() {
 
   // Keyboard shortcuts
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+    // Ensure window has focus when mounted
+    try {
+      window.focus();
+    } catch {
+      // ignore
+    }
 
-      if (e.code === 'Space') {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only ignore if the user is genuinely typing into a text field
+      if (
+        (e.target instanceof HTMLInputElement && ['text', 'search', 'email', 'password'].includes(e.target.type)) ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target as HTMLElement)?.isContentEditable
+      ) {
+        return;
+      }
+
+      const key = (e.key || '').toLowerCase();
+      const code = e.code || '';
+
+      // Spacebar: Play / Pause
+      if (code === 'Space' || key === ' ' || key === 'spacebar') {
         e.preventDefault();
         const nextDir = timeDirection === 0 ? 1 : 0;
         handleTogglePlay(nextDir);
-      } else if (e.key === 'i' || e.key === 'I') {
+        showHotkeyFeedback('SPACE', nextDir === 0 ? 'Simulation Paused' : 'Simulation Playing (1.0x)');
+        if (document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
+          document.activeElement.blur();
+        }
+        return;
+      }
+
+      // I: Inspect Tool
+      if (key === 'i') {
         setCurrentTool('inspect');
-      } else if (e.key === 'f' || e.key === 'F') {
+        showHotkeyFeedback('I', 'Tool: Organism Inspector');
+        return;
+      }
+
+      // F: Feed Flakes Tool + Spawn Flakes
+      if (key === 'f') {
         setCurrentTool('feed');
-      } else if (e.key === 'w' || e.key === 'W') {
+        if (sceneManager) {
+          sceneManager.dropFoodAtScreen(window.innerWidth / 2, window.innerHeight * 0.35);
+        }
+        showHotkeyFeedback('F', 'Feed Flakes (Flakes dropped)');
+        return;
+      }
+
+      // W: Substrate Wafer Tool + Drop Wafer
+      if (key === 'w') {
         setCurrentTool('wafer');
-      } else if (e.key === 'c' || e.key === 'C') {
+        if (sceneManager) {
+          sceneManager.dropSubstrateWafer(0, 0);
+        }
+        showHotkeyFeedback('W', 'Substrate Wafer (Wafer dropped)');
+        return;
+      }
+
+      // C: Clean Glass Tool
+      if (key === 'c') {
         setCurrentTool('clean_glass');
-      } else if (e.key === 's' || e.key === 'S') {
+        floraSim.cleanRadius(floraSim.width / 2, floraSim.height / 2, 80);
+        showHotkeyFeedback('C', 'Clean Glass Scrubber');
+        return;
+      }
+
+      // S: Stir Water Tool + Agitate Currents
+      if (key === 's') {
         setCurrentTool('stir_water');
-      } else if (e.key === 'z' || e.key === 'Z') {
-        handleToggleZenTour();
-      } else if (e.key === 'p' || e.key === 'P') {
+        if (sceneManager) {
+          sceneManager.stirWaterAtScreen(window.innerWidth / 2, window.innerHeight / 2);
+        }
+        showHotkeyFeedback('S', 'Stir Currents & Tap Glass');
+        return;
+      }
+
+      // V: Camera Perspective Preset
+      if (key === 'v') {
+        if (sceneManager) {
+          const next = sceneManager.cycleCameraPreset();
+          setActiveCameraPreset(next);
+          setIsZenTour(false);
+          showHotkeyFeedback('V', `Camera: ${CAMERA_PRESETS[next]?.name || next}`);
+        }
+        return;
+      }
+
+      // Z: Zen Cinematic Tour
+      if (key === 'z') {
+        const next = sceneManager?.toggleZenTour() ?? !isZenTour;
+        setIsZenTour(next);
+        if (next) {
+          setInspectedOrganism(null);
+        }
+        showHotkeyFeedback('Z', `Zen Cinematic Tour: ${next ? 'ON' : 'OFF'}`);
+        return;
+      }
+
+      // P: High-Res Photo Snapshot
+      if (key === 'p') {
         handleCaptureSnapshot();
-      } else if (e.key === 'l' || e.key === 'L') {
-        handleToggleDeskLamp();
-      } else if (e.key === '1') {
+        showHotkeyFeedback('P', 'High-Res Photo Snapshot Captured');
+        return;
+      }
+
+      // L: Desk Reading Lamp
+      if (key === 'l') {
+        if (sceneManager) {
+          const newState = sceneManager.toggleDeskLamp();
+          setDeskLampOn(newState);
+          showHotkeyFeedback('L', `Desk Reading Lamp: ${newState ? 'ON' : 'OFF'}`);
+        }
+        return;
+      }
+
+      // T: Toggle 4D Time Toolbar (Expand / Collapse)
+      if (key === 't') {
+        setIsTimeToolbarExpanded((prev) => {
+          const next = !prev;
+          showHotkeyFeedback('T', `4D Time Toolbar: ${next ? 'Expanded' : 'Collapsed'}`);
+          return next;
+        });
+        return;
+      }
+
+      // 1 - 4: Lighting Presets
+      if (key === '1' || code === 'Digit1' || code === 'Numpad1') {
         handleSelectLighting('daylight');
-      } else if (e.key === '2') {
+        showHotkeyFeedback('1', 'Lighting: Daylight');
+        return;
+      }
+      if (key === '2' || code === 'Digit2' || code === 'Numpad2') {
         handleSelectLighting('sunset');
-      } else if (e.key === '3') {
+        showHotkeyFeedback('2', 'Lighting: Golden Sunset');
+        return;
+      }
+      if (key === '3' || code === 'Digit3' || code === 'Numpad3') {
         handleSelectLighting('bioluminescent');
-      } else if (e.key === '4') {
+        showHotkeyFeedback('3', 'Lighting: Bioluminescent Deep');
+        return;
+      }
+      if (key === '4' || code === 'Digit4' || code === 'Numpad4') {
         handleSelectLighting('midnight');
-      } else if (e.key === 'b' || e.key === 'B') {
-        setShowBenchmark((prev) => !prev);
-      } else if (e.key === 'e' || e.key === 'E') {
-        setShowEcology((prev) => !prev);
-      } else if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+        showHotkeyFeedback('4', 'Lighting: Midnight Moon');
+        return;
+      }
+
+      // B: Benchmark HUD
+      if (key === 'b') {
+        setShowBenchmark((prev) => {
+          showHotkeyFeedback('B', `Benchmark Diagnostics HUD: ${!prev ? 'OPEN' : 'CLOSED'}`);
+          return !prev;
+        });
+        return;
+      }
+
+      // E: Ecosystem Inspector HUD
+      if (key === 'e') {
+        setShowEcology((prev) => {
+          showHotkeyFeedback('E', `Ecosystem Inspector: ${!prev ? 'OPEN' : 'CLOSED'}`);
+          return !prev;
+        });
+        return;
+      }
+
+      // ? or /: Shortcuts Help
+      if (key === '?' || key === '/' || code === 'Slash') {
         setShowShortcuts((prev) => !prev);
-      } else if (e.key === 'Escape') {
+        return;
+      }
+
+      // Escape: Close active overlays
+      if (key === 'escape' || code === 'Escape') {
         if (inspectedOrganism) {
           handleCloseDossier();
         } else if (showShortcuts) {
@@ -271,12 +435,22 @@ export default function App() {
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [timeDirection, sceneManager, isZenTour, inspectedOrganism, showShortcuts, showBenchmark, showBotanical, showEcology]);
 
   return (
-    <main className="relative w-screen h-screen overflow-hidden bg-slate-950 select-none">
+    <main
+      tabIndex={0}
+      onPointerDown={() => {
+        try {
+          window.focus();
+        } catch {
+          // ignore
+        }
+      }}
+      className="relative w-screen h-screen overflow-hidden bg-slate-950 select-none focus:outline-none"
+    >
       {/* Three.js 2.5D Canvas Viewport */}
       <div ref={canvasContainerRef} className="absolute inset-0 w-full h-full" />
 
@@ -292,6 +466,8 @@ export default function App() {
         stats={stats}
         currentPhase={ecologySim.phaseEngine.currentPhase}
         isZenTour={isZenTour}
+        cameraPresetName={CAMERA_PRESETS[activeCameraPreset]?.name}
+        onCycleCameraPreset={handleCycleCameraPreset}
         onToggleZenTour={handleToggleZenTour}
         onCaptureSnapshot={handleCaptureSnapshot}
         onOpenShortcuts={() => setShowShortcuts(true)}
@@ -313,7 +489,7 @@ export default function App() {
         sceneManager={sceneManager}
       />
 
-      {/* Bottom 4D Temporal Timeline */}
+      {/* Bottom 4D Temporal Timeline (Collapsed by default) */}
       <TemporalTimeline
         boidSim={boidSim}
         currentTimeW={currentTimeW}
@@ -324,6 +500,8 @@ export default function App() {
         onTogglePlay={handleTogglePlay}
         onSetSpeed={handleSetSpeed}
         onToggleEchoes={handleToggleEchoes}
+        isExpanded={isTimeToolbarExpanded}
+        onToggleExpanded={setIsTimeToolbarExpanded}
       />
 
       {/* Live Organism Dossier Card HUD */}
@@ -367,6 +545,18 @@ export default function App() {
           snapshotFlash ? 'opacity-90' : 'opacity-0'
         }`}
       />
+
+      {/* Floating HUD Hotkey Confirmation Toast */}
+      {hotkeyToast && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in fade-in slide-in-from-bottom-2 duration-150">
+          <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-slate-900/90 backdrop-blur-md border border-cyan-500/40 shadow-[0_0_24px_rgba(6,182,212,0.3)] text-white text-xs font-medium">
+            <span className="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-700/60 font-mono text-[11px] font-bold">
+              {hotkeyToast.key}
+            </span>
+            <span className="text-slate-200">{hotkeyToast.label}</span>
+          </div>
+        </div>
+      )}
 
       {/* Subtle bottom room ambient vignette */}
       <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_120px_rgba(0,0,0,0.7)]" />

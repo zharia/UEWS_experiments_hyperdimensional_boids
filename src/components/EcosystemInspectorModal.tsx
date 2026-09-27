@@ -36,10 +36,14 @@ import {
   ScrollText,
   GitBranch,
   MapPin,
+  Radio,
+  Volume2,
+  Waves,
 } from 'lucide-react';
 import { EcologySimulation } from '../simulation/EcologySimulation';
 import { EcologicalAgent } from '../agents/agent/EcologicalAgent';
 import { EcologicalPhaseType } from '../phases/phase/EcologicalPhase';
+import { generateMorphologicalSignature } from '../morphology/MorphologicalSignature';
 
 interface EcosystemInspectorModalProps {
   isOpen: boolean;
@@ -52,7 +56,7 @@ export const EcosystemInspectorModal: React.FC<EcosystemInspectorModalProps> = (
   onClose,
   ecologySim,
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'populations' | 'history' | 'antics' | 'agents' | 'fields' | 'persistence'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'populations' | 'history' | 'antics' | 'agents' | 'fields' | 'persistence' | 'acoustic'>('overview');
   const [selectedAgentId, setSelectedAgentId] = useState<string>(ecologySim.agents[0]?.id || '');
   const [persistenceFeedback, setPersistenceFeedback] = useState<string>('');
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
@@ -166,6 +170,7 @@ export const EcosystemInspectorModal: React.FC<EcosystemInspectorModalProps> = (
             { id: 'antics', label: `Antics & Scenes (${telemetry.activeAntics.length})`, icon: Sparkles },
             { id: 'agents', label: `Agent Cognition (${ecologySim.agents.length})`, icon: Brain },
             { id: 'fields', label: 'Environmental Fields', icon: Compass },
+            { id: 'acoustic', label: 'Acoustic Soundscape', icon: Volume2 },
             { id: 'persistence', label: 'World Persistence', icon: Database },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -659,6 +664,171 @@ export const EcosystemInspectorModal: React.FC<EcosystemInspectorModalProps> = (
                       ))}
                     </div>
                   </div>
+
+                  {/* Acoustic Perception & Lateral Line Telemetry */}
+                  <div className="p-5 rounded-xl bg-slate-950/70 border border-slate-800">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Volume2 className="w-4 h-4 text-cyan-400" />
+                        <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+                          Acoustic & Lateral-Line Perception
+                        </h4>
+                      </div>
+                      <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-800 text-cyan-300">
+                        {selectedAgent.lastAcousticSensoryState?.ambientSoundPressureDb.toFixed(1) ?? '-36.0'} dB
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3 text-xs font-mono">
+                      <div className="p-2.5 rounded bg-slate-900 border border-slate-800">
+                        <span className="text-[10px] text-slate-400 block">Hearing Acuity</span>
+                        <span className="font-semibold text-white">
+                          {(selectedAgent.speciesTraits.traits.acousticSensory?.hearingAcuity ?? 1.0).toFixed(2)}x
+                        </span>
+                      </div>
+                      <div className="p-2.5 rounded bg-slate-900 border border-slate-800">
+                        <span className="text-[10px] text-slate-400 block">Lateral-Line Sens.</span>
+                        <span className="font-semibold text-teal-300">
+                          {(selectedAgent.speciesTraits.traits.acousticSensory?.lateralLineSensitivity ?? 1.0).toFixed(2)}x
+                        </span>
+                      </div>
+                      <div className="p-2.5 rounded bg-slate-900 border border-slate-800">
+                        <span className="text-[10px] text-slate-400 block">Startle Threshold</span>
+                        <span className="font-semibold text-rose-300">
+                          {((selectedAgent.speciesTraits.traits.acousticSensory?.startleThreshold ?? 0.5) * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                      <div className="p-2.5 rounded bg-slate-900 border border-slate-800">
+                        <span className="text-[10px] text-slate-400 block">Foraging Attraction</span>
+                        <span className="font-semibold text-amber-300">
+                          {((selectedAgent.speciesTraits.traits.acousticSensory?.foragingAcousticAttraction ?? 0.5) * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Lateral Line Flow Vibration */}
+                    <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 mb-3 text-xs font-mono">
+                      <div className="flex justify-between text-slate-400 mb-1">
+                        <span className="flex items-center gap-1.5">
+                          <Waves className="w-3.5 h-3.5 text-teal-400" />
+                          Neuromast Flow Vibration:
+                        </span>
+                        <span className="text-teal-300 font-semibold">
+                          {((selectedAgent.lastAcousticSensoryState?.flowVibrationLevel ?? 0) * 100).toFixed(0)}% ({selectedAgent.lastAcousticSensoryState?.dominantCondition ?? 'calm'})
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-teal-500 rounded-full transition-all"
+                          style={{ width: `${Math.min(100, (selectedAgent.lastAcousticSensoryState?.flowVibrationLevel ?? 0) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Recently Heard Discrete Sounds */}
+                    <div>
+                      <span className="text-[11px] font-mono text-slate-400 block mb-1.5">
+                        Heard Discrete Sound Events ({selectedAgent.lastPerceivedAcousticEvents.length} in range):
+                      </span>
+                      {selectedAgent.lastPerceivedAcousticEvents.length === 0 ? (
+                        <div className="text-[11px] font-mono text-slate-500 italic p-2 rounded bg-slate-900 border border-slate-800 text-center">
+                          No discrete shockwaves or feeding clicks detected in immediate auditory range.
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5 max-h-32 overflow-y-auto font-mono text-xs">
+                          {selectedAgent.lastPerceivedAcousticEvents.map((ev) => (
+                            <div
+                              key={ev.id}
+                              className={`flex items-center justify-between p-2 rounded border ${
+                                ev.isStartling
+                                  ? 'bg-rose-950/40 border-rose-800/80 text-rose-200'
+                                  : ev.isAttractive
+                                  ? 'bg-amber-950/40 border-amber-800/80 text-amber-200'
+                                  : 'bg-slate-900 border-slate-800 text-slate-300'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold uppercase text-[10px]">
+                                  {ev.sourceType.replace(/_/g, ' ')}
+                                </span>
+                                {ev.isStartling && (
+                                  <span className="text-[9px] px-1 py-0.2 rounded bg-rose-900 text-rose-200 uppercase font-bold">
+                                    Startle Reflex
+                                  </span>
+                                )}
+                                {ev.isAttractive && (
+                                  <span className="text-[9px] px-1 py-0.2 rounded bg-amber-900 text-amber-200 uppercase font-bold">
+                                    Foraging Cue
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-slate-400 text-[11px]">
+                                {ev.distance.toFixed(1)}m | {(ev.perceivedIntensity * 100).toFixed(0)}%
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Morphological Signature & Posture Expression (Task 005) */}
+                  {(() => {
+                    const morphSig = generateMorphologicalSignature(selectedAgent.id, 0);
+                    return (
+                      <div className="p-5 rounded-xl bg-slate-950/70 border border-slate-800">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <Layers className="w-4 h-4 text-teal-400" />
+                            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+                              Morphological Identity & Posture Signature (Task 005)
+                            </h4>
+                          </div>
+                          <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-teal-950/80 border border-teal-800 text-teal-300">
+                            Aspect: {morphSig.aspect}x
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3 text-xs font-mono">
+                          <div className="p-2.5 rounded bg-slate-900 border border-slate-800">
+                            <span className="text-[10px] text-slate-400 block">Body Depth</span>
+                            <span className="font-semibold text-white">{morphSig.bodyDepth}x</span>
+                          </div>
+                          <div className="p-2.5 rounded bg-slate-900 border border-slate-800">
+                            <span className="text-[10px] text-slate-400 block">Anterior Taper</span>
+                            <span className="font-semibold text-white">{morphSig.taper}</span>
+                          </div>
+                          <div className="p-2.5 rounded bg-slate-900 border border-slate-800">
+                            <span className="text-[10px] text-slate-400 block">Compliance / Flex</span>
+                            <span className="font-semibold text-teal-300">{morphSig.flexibility}x</span>
+                          </div>
+                          <div className="p-2.5 rounded bg-slate-900 border border-slate-800">
+                            <span className="text-[10px] text-slate-400 block">Asymmetry Bias</span>
+                            <span className={`font-semibold ${morphSig.asymmetryBias >= 0 ? 'text-sky-300' : 'text-purple-300'}`}>
+                              {morphSig.asymmetryBias >= 0 ? `+${morphSig.asymmetryBias}` : morphSig.asymmetryBias}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs font-mono">
+                          <div className="p-2 rounded bg-slate-900 border border-slate-800">
+                            <span className="text-[10px] text-slate-400 block">Mass Distribution</span>
+                            <span className="text-slate-300">
+                              {morphSig.massDistribution > 0 ? `Anterior (+${morphSig.massDistribution})` : `Posterior (${morphSig.massDistribution})`}
+                            </span>
+                          </div>
+                          <div className="p-2 rounded bg-slate-900 border border-slate-800">
+                            <span className="text-[10px] text-slate-400 block">Posterior Locomotion</span>
+                            <span className="text-slate-300">{morphSig.posteriorExpression}x hydro-wave</span>
+                          </div>
+                          <div className="p-2 rounded bg-slate-900 border border-slate-800">
+                            <span className="text-[10px] text-slate-400 block">Surface Complexity</span>
+                            <span className="text-slate-300">{morphSig.surfaceComplexity} ripple</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>
@@ -701,6 +871,74 @@ export const EcosystemInspectorModal: React.FC<EcosystemInspectorModalProps> = (
                 </div>
               </div>
 
+              {/* Authoritative Environmental World Model (Task 003) */}
+              {ecologySim.environment && (
+                <div className="p-5 rounded-xl bg-slate-950/70 border border-slate-800">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300">
+                      Authoritative Environmental Dynamics (Task 003)
+                    </h3>
+                    <span className="text-xs font-mono text-teal-400">
+                      Substrate: {ecologySim.environment.substrate.composition.replace('_', ' ')}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono mb-4">
+                    <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                      <span className="text-slate-400 block text-[11px]">Water Flow Velocity</span>
+                      <span className="text-teal-300 font-bold">
+                        ({ecologySim.environment.water.flow.x.toFixed(2)}, {ecologySim.environment.water.flow.y.toFixed(2)}, {ecologySim.environment.water.flow.z.toFixed(2)})
+                      </span>
+                    </div>
+                    <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                      <span className="text-slate-400 block text-[11px]">Turbulence & Stirring</span>
+                      <span className="text-sky-300 font-bold">
+                        {(ecologySim.environment.water.turbulence * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                      <span className="text-slate-400 block text-[11px]">Water Turbidity</span>
+                      <span className="text-amber-300 font-bold">
+                        {(ecologySim.environment.water.turbidity * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                      <span className="text-slate-400 block text-[11px]">Optical Clarity</span>
+                      <span className="text-emerald-300 font-bold">
+                        {(ecologySim.environment.water.clarity * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
+                    <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                      <span className="text-slate-400 block text-[11px]">Benthic Sediment Puff</span>
+                      <span className="text-amber-200 font-bold">
+                        {(ecologySim.environment.substrate.sediment * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                      <span className="text-slate-400 block text-[11px]">Substrate Stability</span>
+                      <span className="text-emerald-300 font-bold">
+                        {(ecologySim.environment.substrate.stability * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                      <span className="text-slate-400 block text-[11px]">Vegetation Canopy</span>
+                      <span className="text-teal-300 font-bold">
+                        {(ecologySim.environment.vegetation.density * 100).toFixed(1)}% (Health: {(ecologySim.environment.vegetation.health * 100).toFixed(0)}%)
+                      </span>
+                    </div>
+                    <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                      <span className="text-slate-400 block text-[11px]">Suspended Particulates</span>
+                      <span className="text-sky-300 font-bold">
+                        {ecologySim.environment.particles.density} particles
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Resources Status */}
               <div className="p-5 rounded-xl bg-slate-950/70 border border-slate-800">
                 <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300 mb-3">
@@ -718,6 +956,181 @@ export const EcosystemInspectorModal: React.FC<EcosystemInspectorModalProps> = (
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'acoustic' && (
+            <div className="space-y-6">
+              {/* Telemetry & Signature Overview */}
+              <div className="p-5 rounded-xl bg-slate-950/70 border border-slate-800">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300">
+                      Authoritative Acoustic Ecology Field
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Atmosphere, not a soundtrack. Soundscape derived dynamically from physics, populations, and historical event causality.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-cyan-950/80 border border-cyan-800 text-cyan-300">
+                      Estimated: {telemetry.acousticTelemetry?.signature.estimated_loudness_db.toFixed(1)} dB
+                    </span>
+                  </div>
+                </div>
+
+                {/* 6-Layer Architecture Gauges */}
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                  <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                    <div className="flex justify-between text-xs text-slate-400 mb-1">
+                      <span>Layer 0: Ambient Bed</span>
+                      <span className="font-mono text-cyan-300 font-semibold">
+                        {((telemetry.acousticTelemetry?.state.ambient_level ?? 0) * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                      <div className="h-full bg-cyan-500 rounded-full" style={{ width: `${(telemetry.acousticTelemetry?.state.ambient_level ?? 0) * 100}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                    <div className="flex justify-between text-xs text-slate-400 mb-1">
+                      <span>Layer 1: Water Dynamics</span>
+                      <span className="font-mono text-teal-300 font-semibold">
+                        {((telemetry.acousticTelemetry?.state.water_activity ?? 0) * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                      <div className="h-full bg-teal-500 rounded-full" style={{ width: `${(telemetry.acousticTelemetry?.state.water_activity ?? 0) * 100}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                    <div className="flex justify-between text-xs text-slate-400 mb-1">
+                      <span>Layer 2: Biological Texture</span>
+                      <span className="font-mono text-emerald-300 font-semibold">
+                        {((telemetry.acousticTelemetry?.state.biological_activity ?? 0) * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                      <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${(telemetry.acousticTelemetry?.state.biological_activity ?? 0) * 100}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                    <div className="flex justify-between text-xs text-slate-400 mb-1">
+                      <span>Substrate Activity</span>
+                      <span className="font-mono text-amber-300 font-semibold">
+                        {((telemetry.acousticTelemetry?.state.substrate_activity ?? 0) * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                      <div className="h-full bg-amber-500 rounded-full" style={{ width: `${(telemetry.acousticTelemetry?.state.substrate_activity ?? 0) * 100}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                    <div className="flex justify-between text-xs text-slate-400 mb-1">
+                      <span>Turbulence & Eddies</span>
+                      <span className="font-mono text-sky-300 font-semibold">
+                        {((telemetry.acousticTelemetry?.state.turbulence ?? 0) * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                      <div className="h-full bg-sky-500 rounded-full" style={{ width: `${(telemetry.acousticTelemetry?.state.turbulence ?? 0) * 100}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                    <div className="flex justify-between text-xs text-slate-400 mb-1">
+                      <span>Disturbance Level</span>
+                      <span className="font-mono text-rose-300 font-semibold">
+                        {((telemetry.acousticTelemetry?.state.disturbance ?? 0) * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                      <div className="h-full bg-rose-500 rounded-full" style={{ width: `${(telemetry.acousticTelemetry?.state.disturbance ?? 0) * 100}%` }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 37: "Why am I hearing this?" Causal Chain Inspection */}
+              <div className="p-5 rounded-xl bg-slate-950/70 border border-slate-800">
+                <div className="flex items-center gap-2 mb-3">
+                  <ScrollText className="w-4 h-4 text-cyan-400" />
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300">
+                    Causal Acoustic Traces ("Why am I hearing this?")
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-400 mb-4">
+                  Every discrete acoustic event retains an authoritative reference to its simulated ecological cause.
+                </p>
+
+                {telemetry.acousticTelemetry?.recentCausalTraces && telemetry.acousticTelemetry.recentCausalTraces.length > 0 ? (
+                  <div className="space-y-2.5">
+                    {telemetry.acousticTelemetry.recentCausalTraces.map((trace, idx) => (
+                      <div key={idx} className="p-3 rounded-lg bg-slate-900 border border-slate-800 font-mono text-xs flex flex-col gap-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-cyan-300 font-semibold uppercase tracking-wider">
+                            {trace.source.replace(/_/g, ' ')}
+                          </span>
+                          <span className="text-[11px] text-slate-400">
+                            t = {trace.timestamp.toFixed(1)}s | at {trace.location}
+                          </span>
+                        </div>
+                        <div className="text-slate-300 text-[11px] pl-3 border-l-2 border-cyan-700/60 mt-0.5">
+                          <span className="text-slate-400">Cause: </span>
+                          <span>{trace.cause}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-6 text-center text-slate-500 font-mono text-xs bg-slate-900/50 rounded-xl border border-slate-800/80">
+                    No discrete event sounds active. Continuous baseline ambient bed and laminar water flow murmuring gently.
+                  </div>
+                )}
+              </div>
+
+              {/* Closed-Loop Bi-directional Sensory Feedback */}
+              <div className="p-5 rounded-xl bg-slate-950/70 border border-slate-800">
+                <div className="flex items-center gap-2 mb-3">
+                  <Radio className="w-4 h-4 text-teal-400" />
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300">
+                    Closed-Loop Acoustic Ecology (Bi-directional Sensory Coupling)
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed mb-3">
+                  Sound is not merely an output projection. Organisms actively sense acoustic pressure waves and fluid vibrations via lateral lines and inner ear otoliths. Sudden shockwaves provoke startle/flee responses, while surface food-drop impacts attract foraging cohorts.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
+                  <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                    <span className="text-slate-400 block text-[10px] uppercase font-semibold">Active Acoustic Listeners</span>
+                    <span className="text-base text-cyan-300 font-bold mt-1 block">
+                      {ecologySim.agents.filter((a) => a.lifecycle !== 'dead').length} organisms
+                    </span>
+                    <span className="text-[10px] text-slate-500 mt-0.5 block">Sampling at 10Hz</span>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                    <span className="text-slate-400 block text-[10px] uppercase font-semibold">Startle State Active</span>
+                    <span className="text-base text-rose-400 font-bold mt-1 block">
+                      {ecologySim.agents.filter((a) => a.startleCooldown > 0).length} organisms
+                    </span>
+                    <span className="text-[10px] text-slate-500 mt-0.5 block">C-start evasive reflexes</span>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+                    <span className="text-slate-400 block text-[10px] uppercase font-semibold">Acoustically Attracted</span>
+                    <span className="text-base text-amber-300 font-bold mt-1 block">
+                      {ecologySim.agents.filter((a) => a.behaviour.currentBehaviour.reason.includes('Acoustic') || a.behaviour.currentBehaviour.reason.includes('acoustic')).length} organisms
+                    </span>
+                    <span className="text-[10px] text-slate-500 mt-0.5 block">Orienting to feeding sounds</span>
+                  </div>
                 </div>
               </div>
             </div>

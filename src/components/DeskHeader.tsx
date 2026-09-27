@@ -31,6 +31,8 @@ interface DeskHeaderProps {
   stats: SimulationStats;
   currentPhase?: string;
   isZenTour?: boolean;
+  cameraPresetName?: string;
+  onCycleCameraPreset?: () => void;
   onToggleZenTour?: () => void;
   onCaptureSnapshot?: () => void;
   onOpenShortcuts?: () => void;
@@ -43,6 +45,8 @@ export const DeskHeader: React.FC<DeskHeaderProps> = ({
   stats,
   currentPhase = 'COLONISATION',
   isZenTour = false,
+  cameraPresetName,
+  onCycleCameraPreset,
   onToggleZenTour,
   onCaptureSnapshot,
   onOpenShortcuts,
@@ -262,6 +266,18 @@ export const DeskHeader: React.FC<DeskHeaderProps> = ({
           <Waves className="w-3 h-3 text-teal-400" />
           <span>SSD Refraction</span>
         </div>
+
+        {/* Camera Perspective Cycle Button */}
+        {onCycleCameraPreset && (
+          <button
+            onClick={onCycleCameraPreset}
+            title="Switch Camera Perspective Preset (Hotkey: V)"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-800 bg-slate-900/80 hover:bg-slate-800/90 text-slate-300 hover:text-cyan-300 hover:border-cyan-700 text-xs font-mono transition-all cursor-pointer shadow-sm"
+          >
+            <Eye className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden md:inline">{cameraPresetName || 'View'}</span>
+          </button>
+        )}
 
         {/* Ambient Zen Cinematic Tour Toggle */}
         {onToggleZenTour && (

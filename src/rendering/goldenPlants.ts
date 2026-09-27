@@ -54,10 +54,10 @@ export function createGoldenBranchingCoralGeometry(
     const tubeGeo = new THREE.TubeGeometry(curve, 5, radius, 6, false);
     geometries.push(tubeGeo);
 
-    // Terminal bulbous apical tip at branch tips
+    // Terminal tapered apical tip at branch tips
     if (depth >= maxDepth - 1 || radius < 0.1) {
-      const tipGeo = new THREE.SphereGeometry(radius * 1.35, 6, 6);
-      tipGeo.translate(end.x, end.y, end.z);
+      const tipGeo = new THREE.CylinderGeometry(0.01, radius, radius * 1.2, 5, 1);
+      tipGeo.translate(end.x, end.y + radius * 0.6, end.z);
       geometries.push(tipGeo);
     }
 

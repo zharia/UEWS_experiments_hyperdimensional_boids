@@ -41,6 +41,13 @@ export interface SocialTraits {
   curiosityTendency: number; // 0 to 1
 }
 
+export interface AcousticSensoryTraits {
+  hearingAcuity: number; // Multiplier on acoustic detection radius & perceived loudness (0.2 to 2.0)
+  lateralLineSensitivity: number; // Sensitivity to hydrodynamic flow vibrations & pressure waves (0.2 to 2.0)
+  startleThreshold: number; // Perceived loudness threshold to trigger evasive startle/flee reflex (0.2 to 0.9)
+  foragingAcousticAttraction: number; // Tendency to investigate feeding clicks or surface impacts (0.1 to 1.0)
+}
+
 export interface SpeciesTraits {
   movement: MovementTraits;
   habitatPreferences: Record<string, number>; // HabitatId/Type -> Suitability multiplier (-1.0 to 1.0)
@@ -48,6 +55,7 @@ export interface SpeciesTraits {
   lifespan: LifespanTraits;
   reproduction: ReproductionTraits;
   socialTendency: SocialTraits;
+  acousticSensory: AcousticSensoryTraits;
   trophicLevel: number; // 1 = primary/herbivore, 2 = meso-consumer, 3 = apex
   biomassPerIndividual: number;
 }
@@ -103,6 +111,12 @@ export class SpeciesRegistry {
           territorialityTendency: 0.65,
           curiosityTendency: 0.5,
         },
+        acousticSensory: {
+          hearingAcuity: 1.0,
+          lateralLineSensitivity: 1.1,
+          startleThreshold: 0.65, // Stately pelagic grazer, unflappable
+          foragingAcousticAttraction: 0.60,
+        },
         trophicLevel: 2,
         biomassPerIndividual: 4.5,
       },
@@ -147,6 +161,12 @@ export class SpeciesRegistry {
           schoolingAffinity: 0.85,
           territorialityTendency: 0.15,
           curiosityTendency: 0.6,
+        },
+        acousticSensory: {
+          hearingAcuity: 1.45, // Acute hearing across water column
+          lateralLineSensitivity: 1.35,
+          startleThreshold: 0.35, // Highly nervous schooler, rapid startle reflex
+          foragingAcousticAttraction: 0.85,
         },
         trophicLevel: 1.5,
         biomassPerIndividual: 1.2,
@@ -193,6 +213,12 @@ export class SpeciesRegistry {
           territorialityTendency: 0.2,
           curiosityTendency: 0.7,
         },
+        acousticSensory: {
+          hearingAcuity: 1.35,
+          lateralLineSensitivity: 1.2,
+          startleThreshold: 0.38,
+          foragingAcousticAttraction: 0.95, // Immediately darts toward surface impact / food clicks
+        },
         trophicLevel: 1.2,
         biomassPerIndividual: 1.0,
       },
@@ -237,6 +263,12 @@ export class SpeciesRegistry {
           schoolingAffinity: 0.3,
           territorialityTendency: 0.35,
           curiosityTendency: 0.55,
+        },
+        acousticSensory: {
+          hearingAcuity: 0.90,
+          lateralLineSensitivity: 1.30,
+          startleThreshold: 0.75, // Resilient pelagic grazer
+          foragingAcousticAttraction: 0.50,
         },
         trophicLevel: 2,
         biomassPerIndividual: 5.0,
@@ -283,6 +315,12 @@ export class SpeciesRegistry {
           territorialityTendency: 0.4,
           curiosityTendency: 0.65,
         },
+        acousticSensory: {
+          hearingAcuity: 1.15,
+          lateralLineSensitivity: 1.55, // Acute lateral-line navigation in dark caves
+          startleThreshold: 0.45,
+          foragingAcousticAttraction: 0.65,
+        },
         trophicLevel: 1.5,
         biomassPerIndividual: 1.8,
       },
@@ -327,6 +365,12 @@ export class SpeciesRegistry {
           schoolingAffinity: 0.1,
           territorialityTendency: 0.5,
           curiosityTendency: 0.75,
+        },
+        acousticSensory: {
+          hearingAcuity: 0.45,
+          lateralLineSensitivity: 1.75, // Exceptional substrate mechanical vibration sensitivity
+          startleThreshold: 0.50,
+          foragingAcousticAttraction: 0.60,
         },
         trophicLevel: 1.0,
         biomassPerIndividual: 2.0,
@@ -373,6 +417,12 @@ export class SpeciesRegistry {
           territorialityTendency: 0.1,
           curiosityTendency: 0.4,
         },
+        acousticSensory: {
+          hearingAcuity: 0.30,
+          lateralLineSensitivity: 0.60,
+          startleThreshold: 0.85, // Heavy shell protection
+          foragingAcousticAttraction: 0.20,
+        },
         trophicLevel: 1.0,
         biomassPerIndividual: 1.2,
       },
@@ -416,6 +466,7 @@ export class SpeciesRegistry {
             preferredBreedingHabitat: 'OPEN_WATER',
           },
           socialTendency: { schoolingAffinity: 0.5, territorialityTendency: 0.3, curiosityTendency: 0.5 },
+          acousticSensory: { hearingAcuity: 1.0, lateralLineSensitivity: 1.0, startleThreshold: 0.5, foragingAcousticAttraction: 0.5 },
           trophicLevel: 1.5,
           biomassPerIndividual: 1.5,
         },

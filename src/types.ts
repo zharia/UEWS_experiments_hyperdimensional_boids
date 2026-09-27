@@ -260,4 +260,18 @@ export interface InspectedOrganism {
   energy: number; // 0 - 100
   alertness?: number; // 0 - 1
   colorHex?: string;
+  perceivedAcousticDb?: number;
+  acousticSensorySummary?: string;
+  isAcousticallyStartled?: boolean;
+  morphology?: {
+    aspect: number;
+    bodyDepth: number;
+    taper: number;
+    massDistribution: number;
+    flexibility: number;
+    asymmetryBias: number;
+    curvature: number;
+    compression: number;
+    propulsionTension: number;
+  };
 }

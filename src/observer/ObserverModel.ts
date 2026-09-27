@@ -10,6 +10,7 @@
  */
 
 import { ObserverState } from '../antics/salience/AnticSalience';
+export type { ObserverState };
 
 export class ObserverModel {
   private _state: ObserverState = 'WATCHING';
@@ -26,6 +27,10 @@ export class ObserverModel {
   }
 
   public set state(s: ObserverState) {
+    this._state = s;
+  }
+
+  public setState(s: ObserverState): void {
     this._state = s;
   }
 

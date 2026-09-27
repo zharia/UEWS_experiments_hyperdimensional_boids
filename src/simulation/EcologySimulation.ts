@@ -31,6 +31,12 @@ import { PopulationManager } from '../population/PopulationManager';
 import { HabitatManager } from '../ecology/habitats/HabitatManager';
 import { EcologicalEventLedger } from '../history/EcologicalEventLedger';
 import { SpeciesRegistry } from '../species/Species';
+import { EnvironmentalWorldManager } from '../ecology/environment/EnvironmentalWorldManager';
+import { EnvironmentalSignature } from '../ecology/environment/EnvironmentalState';
+import { AcousticField } from '../ecology/acoustic/AcousticField';
+import { AcousticDerivation } from '../ecology/acoustic/AcousticDerivation';
+import { AcousticProjection } from '../ecology/acoustic/AcousticProjection';
+import { AcousticEvent, AcousticTelemetry } from '../ecology/acoustic/AcousticState';
 
 export interface EcologyTelemetry {
   currentPhase: string;
@@ -54,6 +60,8 @@ export interface EcologyTelemetry {
     senescentCount: number;
   };
   habitats?: { id: string; name: string; occupancy: number; suitabilityAvg: number }[];
+  environmentalSignature?: EnvironmentalSignature;
+  acousticTelemetry?: AcousticTelemetry;
 }
 
 export class EcologySimulation {
@@ -61,6 +69,7 @@ export class EcologySimulation {
   public clock: SimulationClock;
   public fields: DiscreteEnvironmentalFieldGrid;
   public resources: ResourceSystem;
+  public environment: EnvironmentalWorldManager;
   public agents: EcologicalAgent[] = [];
   public anticHistory: AnticHistory;
   public anticScheduler: AnticScheduler;
@@ -70,6 +79,9 @@ export class EcologySimulation {
   public populations: PopulationManager;
   public habitats: HabitatManager;
   public eventLedger: EcologicalEventLedger;
+  public acousticField: AcousticField;
+  public acousticDerivation: AcousticDerivation;
+  public acousticProjection: AcousticProjection;
 
   public bounds: TankBounds3D = {
     minX: -14.0,
@@ -95,6 +107,11 @@ export class EcologySimulation {
     this.populations = new PopulationManager();
     this.habitats = new HabitatManager();
     this.eventLedger = new EcologicalEventLedger(300);
+    this.environment = new EnvironmentalWorldManager(this.random);
+
+    this.acousticField = new AcousticField();
+    this.acousticDerivation = new AcousticDerivation(this.acousticField, { seed: seed ? seed + 4000 : 5004 });
+    this.acousticProjection = new AcousticProjection(this.acousticField);
 
     // Register reproduction callback from antic scheduler
     this.anticScheduler.onReproduction = (parentAId, parentBId, location) => {
@@ -266,6 +283,7 @@ export class EcologySimulation {
     simDt: number;
     newAntics: Antic[];
     completedAntics: Antic[];
+    acousticEvents: AcousticEvent[];
   } {
     const { simDt, triggers } = this.clock.advance(rawDt);
     const simTime = this.clock.simulationTime;
@@ -273,10 +291,11 @@ export class EcologySimulation {
     let completedAntics: Antic[] = [];
 
     if (simDt <= 0) {
-      return { simDt: 0, newAntics: [], completedAntics: [] };
+      return { simDt: 0, newAntics: [], completedAntics: [], acousticEvents: [] };
     }
 
     this.observer.update();
+    this.environment.update(simDt, simTime);
 
     // 1. Locomotion & Steering (Runs every tick, ~60Hz)
     for (const agent of this.agents) {
@@ -290,6 +309,8 @@ export class EcologySimulation {
 
     // 2. Perception (10Hz)
     if (triggers.perception) {
+      const recentAcousticEvents = this.acousticDerivation.getRecentEvents();
+
       for (const agent of this.agents) {
         if (agent.lifecycle === 'dead') continue;
 
@@ -371,6 +392,20 @@ export class EcologySimulation {
           })
           .filter((r) => r.perceivable);
 
+        // Acoustic & Lateral Line Perception (Bi-directional sensory feedback)
+        const perceivedAcoustics = agent.perception.senseAcousticEvents(
+          agent.position,
+          recentAcousticEvents,
+          this.acousticField,
+          agent.speciesTraits.traits.acousticSensory
+        );
+        const acousticSensoryState = agent.perception.senseAcousticSensoryState(
+          agent.position,
+          this.acousticField,
+          agent.speciesTraits.traits.acousticSensory
+        );
+        agent.registerAcousticStimulation(perceivedAcoustics, acousticSensoryState, simTime);
+
         // Behaviour candidates generation
         const candidates = agent.behaviour.generateCandidates(
           agent.id,
@@ -383,7 +418,9 @@ export class EcologySimulation {
           disturbanceStrength > 0.4 ? [{ id: 'disturb', type: 'disturbance', position: new Vector3D(0, 0, 0), distance: 5, threatLevel: disturbanceStrength }] : [],
           simTime,
           migrationTarget,
-          agent.canReproduce(simTime)
+          agent.canReproduce(simTime),
+          perceivedAcoustics,
+          acousticSensoryState
         );
 
         agent.behaviour.selectBehaviour(candidates, simTime);
@@ -391,6 +428,7 @@ export class EcologySimulation {
     }
 
     // 3. Behaviour, Drives, and Lifecycle (~2Hz)
+    let feedingCountThisTick = 0;
     if (triggers.behaviour) {
       for (let i = this.agents.length - 1; i >= 0; i--) {
         const agent = this.agents[i];
@@ -452,6 +490,7 @@ export class EcologySimulation {
               const taken = this.resources.consume(res.id, 0.5, this.fields);
               if (taken > 0) {
                 agent.consumeFood(taken, simTime);
+                feedingCountThisTick++;
 
                 this.eventLedger.recordEvent({
                   eventType: 'FEEDING',
@@ -492,6 +531,10 @@ export class EcologySimulation {
       this.resources.update(simDt * 10.0, simTime, this.fields);
       this.habitats.update(this.agents, this.fields, this.resources.resources, simDt * 10.0);
       this.populations.synchronize(this.agents, simTime);
+
+      const speeds = this.agents.map((a) => a.velocity.length());
+      const totalBiomass = this.populations.calculateTotalBiomass(this.agents);
+      this.environment.recordAgentActivity(speeds, feedingCountThisTick, totalBiomass);
     }
 
     // 6. Succession & Ecological Phase Transitions (~0.02Hz)
@@ -506,6 +549,7 @@ export class EcologySimulation {
       const prevPhase = this.phaseEngine.currentPhase;
       this.phaseEngine.evaluateTransitions(metrics, simTime);
       if (this.phaseEngine.currentPhase !== prevPhase) {
+        this.environment.onSuccessionPhaseChanged(this.phaseEngine.currentPhase);
         this.eventLedger.recordEvent({
           eventType: 'PHASE_CHANGED',
           timestamp: simTime,
@@ -518,12 +562,25 @@ export class EcologySimulation {
       }
     }
 
-    return { simDt, newAntics, completedAntics };
+    // 7. Authoritative Acoustic Derivation (Continuous state + discrete events)
+    const acousticEvents = this.acousticDerivation.update(
+      simDt,
+      simTime,
+      this.environment,
+      this.populations,
+      this.habitats,
+      this.eventLedger,
+      this.anticScheduler.activeAntics,
+      this.fields.sample(0, 0, 0, 'illumination')
+    );
+
+    return { simDt, newAntics, completedAntics, acousticEvents };
   }
 
   public dropFood(x: number, y: number, z: number, nutrition: number = 1.0): void {
     const pellet = this.resources.addFoodPellet(new Vector3D(x, y, z), this.clock.simulationTime, nutrition);
     this.observer.recordInteraction();
+    this.environment.applyFeedingDisturbance(pellet.position, nutrition);
 
     this.eventLedger.recordEvent({
       eventType: 'RESOURCE_REGENERATION',
@@ -538,6 +595,7 @@ export class EcologySimulation {
 
   public triggerDisturbance(strength: number = 0.8): void {
     this.observer.recordInteraction();
+    this.environment.applyDisturbance(strength);
     for (const agent of this.agents) {
       agent.drives.add('fear', strength * 0.6);
       agent.isBursting = true;
@@ -560,12 +618,25 @@ export class EcologySimulation {
     if (elapsedWallSeconds <= 2) return;
     const maxCatchUp = 1800; // max 30 minutes simulated
     const clamped = Math.min(elapsedWallSeconds, maxCatchUp);
-    const stepSize = 10.0; // 10s coarse time steps
-    const steps = Math.floor(clamped / stepSize);
+    const targetSimTime = this.clock.simulationTime + clamped;
+    const steps = 15; // Run coarse update iterations to advance ecology & environment
 
     for (let s = 0; s < steps; s++) {
-      this.update(stepSize);
+      this.update(0.2);
     }
+    this.clock.simulationTime = targetSimTime;
+
+    // Reconstruct present acoustic state at current simulation time
+    this.acousticDerivation.update(
+      0.1,
+      this.clock.simulationTime,
+      this.environment,
+      this.populations,
+      this.habitats,
+      this.eventLedger,
+      this.anticScheduler.activeAntics,
+      this.fields.sample(0, 0, 0, 'illumination')
+    );
   }
 
   /**
@@ -585,6 +656,7 @@ export class EcologySimulation {
       populations: this.populations.toJSON(),
       habitats: this.habitats.toJSON(),
       eventLedger: this.eventLedger.toJSON(),
+      environmentalState: this.environment.toJSON(),
       metadata: {
         tankName: 'Chronos Artificial Ecology',
         description: 'Persistent hyperdimensional multi-scalar artificial ecology with emergent causal dynamics',
@@ -618,6 +690,10 @@ export class EcologySimulation {
       this.eventLedger.fromJSON(state.eventLedger);
     }
 
+    if (state.environmentalState) {
+      this.environment.fromJSON(state.environmentalState);
+    }
+
     // Process idle-time simulation if saved earlier
     if (state.savedAtWallTime) {
       const elapsedSeconds = (Date.now() - state.savedAtWallTime) / 1000.0;
@@ -625,6 +701,18 @@ export class EcologySimulation {
         this.catchUpIdleTime(elapsedSeconds);
       }
     }
+
+    // Reconstruct present acoustic state immediately from authoritative restored world state
+    this.acousticDerivation.update(
+      0.1,
+      this.clock.simulationTime,
+      this.environment,
+      this.populations,
+      this.habitats,
+      this.eventLedger,
+      this.anticScheduler.activeAntics,
+      this.fields.sample(0, 0, 0, 'illumination')
+    );
   }
 
   public async save(): Promise<boolean> {
@@ -708,6 +796,12 @@ export class EcologySimulation {
         occupancy: h.occupantCount,
         suitabilityAvg: 0.8,
       })),
+      environmentalSignature: this.environment.getSignature(),
+      acousticTelemetry: this.acousticProjection.getTelemetry(
+        this.clock.simulationTime,
+        this.acousticDerivation.getRecentEvents(),
+        this.observer.state
+      ),
     };
   }
 }
