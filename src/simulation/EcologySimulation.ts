@@ -523,6 +523,41 @@ export class EcologySimulation {
       );
       newAntics = res.newlyActivated;
       completedAntics = res.completed;
+
+      // Antic Feedback Loop (Task 006 Priority 6):
+      // Completed or newly activated antics feed back directly into local environmental fields and social state
+      for (const antic of completedAntics) {
+        // 1. Social relationship reinforcement between co-participants
+        if (antic.participants.length >= 2) {
+          for (let pA = 0; pA < antic.participants.length; pA++) {
+            for (let pB = 0; pB < antic.participants.length; pB++) {
+              if (pA === pB) continue;
+              const agentA = this.agents.find((a) => a.id === antic.participants[pA].agentId);
+              if (agentA) {
+                const targetId = antic.participants[pB].agentId;
+                const isAffinityAntic =
+                  antic.type === 'COURTSHIP_DISPLAY' ||
+                  antic.type === 'COOPERATIVE_SCHOOLING' ||
+                  antic.type === 'REPRODUCTIVE_SPAWNING';
+                agentA.relationships.modifyRelationship(
+                  targetId,
+                  isAffinityAntic ? 0.08 : -0.05,
+                  0.05,
+                  antic.type === 'TERRITORIAL_STANDOFF' ? 0.06 : -0.02,
+                  simTime
+                );
+              }
+            }
+          }
+        }
+
+        // 2. Environmental perturbation / nutrient deposition from feeding & territorial bouts
+        if (antic.type === 'FEEDING_FRENZY' || antic.type === 'SUBSTRATE_GRAZING' || antic.type === 'SCAVENGER_FEAST') {
+          this.fields.add(antic.location.x, antic.location.y, antic.location.z, 'nutrients', 0.12);
+        } else if (antic.type === 'TERRITORIAL_STANDOFF' || antic.type === 'PREDATOR_EVASION') {
+          this.environment.applyFeedingDisturbance(antic.location, 0.45);
+        }
+      }
     }
 
     // 5. Environmental Fields & Habitat Cycling (~0.1Hz)

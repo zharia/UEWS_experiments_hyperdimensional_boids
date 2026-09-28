@@ -5,10 +5,12 @@
 
 import { Boid4D, FireflyBoid4D, FireflyCycleConfig, FoodPellet, ProcessRegimePreset, TankBounds } from '../types';
 import { SPECIES_CONFIGS } from './species';
+import { SeededRandom } from '../core/random/SeededRandom';
 
 export class BoidSimulation4D {
   public boids: Boid4D[] = [];
   public fireflies: FireflyBoid4D[] = [];
+  public random: SeededRandom;
 
   public bounds: TankBounds = {
     minX: -14.0,
@@ -92,10 +94,11 @@ export class BoidSimulation4D {
   // Event callback when food is consumed
   public onFoodEaten?: (x: number, y: number, z: number) => void;
 
-  constructor(macroCount: number = 2, mesoCount: number = 120, fireflyCount: number = 150) {
+  constructor(macroCount: number = 2, mesoCount: number = 120, fireflyCount: number = 150, seed?: number) {
     this.macroCount = macroCount;
     this.mesoCount = mesoCount;
     this.fireflyCount = fireflyCount;
+    this.random = new SeededRandom(seed !== undefined ? seed : 5005);
     this.initSpatialGrid();
     this.initMultiScalarBoids();
   }
@@ -124,32 +127,33 @@ export class BoidSimulation4D {
       const speciesIndex = i % macroSpeciesCount;
       const cfg = SPECIES_CONFIGS[speciesIndex];
 
-      const x = (Math.random() - 0.5) * 22.0;
-      const y = -4.5 + Math.random() * 8.0; // Grazes between bottom reef & mid column
-      const z = (Math.random() - 0.5) * 8.0;
-      const w = this.bounds.minW + Math.random() * (this.bounds.maxW - this.bounds.minW);
+      const x = (this.random.next() - 0.5) * 22.0;
+      const y = -4.5 + this.random.next() * 8.0; // Grazes between bottom reef & mid column
+      const z = (this.random.next() - 0.5) * 8.0;
+      const w = this.bounds.minW + this.random.next() * (this.bounds.maxW - this.bounds.minW);
 
-      const theta = Math.random() * Math.PI * 2;
-      const speed = 1.6 + Math.random() * 0.5;
+      const theta = this.random.next() * Math.PI * 2;
+      const speed = 1.6 + this.random.next() * 0.5;
 
       this.boids.push({
+        id: `boid_macro_${i}`,
         x,
         y,
         z,
         w,
         vx: Math.cos(theta) * speed,
-        vy: (Math.random() - 0.5) * 0.4,
+        vy: (this.random.next() - 0.5) * 0.4,
         vz: Math.sin(theta) * speed,
-        vw: (Math.random() - 0.5) * 1.5, // Slow, dignified temporal drift
+        vw: (this.random.next() - 0.5) * 1.5, // Slow, dignified temporal drift
         speciesIndex,
         regime: 'macro_pelagic',
-        scale: cfg.baseScale * (0.95 + Math.random() * 0.15),
-        swimPhase: Math.random() * Math.PI * 2,
+        scale: cfg.baseScale * (0.95 + this.random.next() * 0.15),
+        swimPhase: this.random.next() * Math.PI * 2,
         speed,
         temporalAlpha: 1.0,
-        bioluminescence: 0.8 + Math.random() * 0.2,
+        bioluminescence: 0.8 + this.random.next() * 0.2,
         mass: 7.5, // High inertia
-        burstPhase: Math.random(),
+        burstPhase: this.random.next(),
         isBursting: true,
         curiosityTimer: 0,
       });
@@ -160,19 +164,20 @@ export class BoidSimulation4D {
 
     // 2. Spawn Meso Schooling Teleosts (Species 2..5: Tetras, Guppies, Discus, Tangs)
     for (let i = 0; i < this.mesoCount; i++) {
-      const speciesIndex = 2 + Math.floor(Math.random() * (SPECIES_CONFIGS.length - 2));
+      const speciesIndex = 2 + Math.floor(this.random.next() * (SPECIES_CONFIGS.length - 2));
       const cfg = SPECIES_CONFIGS[speciesIndex];
 
-      const x = this.bounds.minX + Math.random() * (this.bounds.maxX - this.bounds.minX);
-      const y = this.bounds.minY + Math.random() * (this.bounds.maxY - this.bounds.minY);
-      const z = this.bounds.minZ + Math.random() * (this.bounds.maxZ - this.bounds.minZ);
-      const w = this.bounds.minW + Math.random() * (this.bounds.maxW - this.bounds.minW);
+      const x = this.bounds.minX + this.random.next() * (this.bounds.maxX - this.bounds.minX);
+      const y = this.bounds.minY + this.random.next() * (this.bounds.maxY - this.bounds.minY);
+      const z = this.bounds.minZ + this.random.next() * (this.bounds.maxZ - this.bounds.minZ);
+      const w = this.bounds.minW + this.random.next() * (this.bounds.maxW - this.bounds.minW);
 
-      const theta = Math.random() * Math.PI * 2;
-      const phi = (Math.random() - 0.5) * Math.PI * 0.5;
-      const speed = 1.8 + Math.random() * (cfg.maxSpeed - 1.8);
+      const theta = this.random.next() * Math.PI * 2;
+      const phi = (this.random.next() - 0.5) * Math.PI * 0.5;
+      const speed = 1.8 + this.random.next() * (cfg.maxSpeed - 1.8);
 
       this.boids.push({
+        id: `boid_meso_${i}`,
         x,
         y,
         z,
@@ -180,17 +185,17 @@ export class BoidSimulation4D {
         vx: Math.cos(theta) * Math.cos(phi) * speed,
         vy: Math.sin(phi) * speed * 0.6,
         vz: Math.sin(theta) * Math.cos(phi) * speed * 0.8,
-        vw: (Math.random() - 0.5) * 4.5,
+        vw: (this.random.next() - 0.5) * 4.5,
         speciesIndex,
         regime: 'meso_schooling',
-        scale: cfg.baseScale * (0.85 + Math.random() * 0.3),
-        swimPhase: Math.random() * Math.PI * 2,
+        scale: cfg.baseScale * (0.85 + this.random.next() * 0.3),
+        swimPhase: this.random.next() * Math.PI * 2,
         speed,
         temporalAlpha: 1.0,
-        bioluminescence: 0.5 + Math.random() * 0.5,
+        bioluminescence: 0.5 + this.random.next() * 0.5,
         mass: 1.0,
-        burstPhase: Math.random(),
-        isBursting: Math.random() > 0.4,
+        burstPhase: this.random.next(),
+        isBursting: this.random.next() > 0.4,
         curiosityTimer: 0,
       });
     }
@@ -198,14 +203,14 @@ export class BoidSimulation4D {
     // 3. Spawn Micro-Firefly Bioluminescent Plankton
     for (let i = 0; i < this.fireflyCount; i++) {
       // Cluster organically near bottom plants, rocks, and water center
-      const angle = Math.random() * Math.PI * 2;
-      const radius = 2.0 + Math.random() * 10.0;
+      const angle = this.random.next() * Math.PI * 2;
+      const radius = 2.0 + this.random.next() * 10.0;
       const x = Math.cos(angle) * radius;
-      const y = -5.8 + Math.random() * 9.5;
-      const z = (Math.random() - 0.5) * 9.0;
-      const w = this.bounds.minW + Math.random() * (this.bounds.maxW - this.bounds.minW);
+      const y = -5.8 + this.random.next() * 9.5;
+      const z = (this.random.next() - 0.5) * 9.0;
+      const w = this.bounds.minW + this.random.next() * (this.bounds.maxW - this.bounds.minW);
 
-      const colorRand = Math.random();
+      const colorRand = this.random.next();
       const colorType = colorRand < 0.6 ? 0 : colorRand < 0.85 ? 1 : 2;
 
       this.fireflies.push({
@@ -214,14 +219,14 @@ export class BoidSimulation4D {
         y,
         z,
         w,
-        vx: (Math.random() - 0.5) * 0.5,
-        vy: (Math.random() - 0.5) * 0.3,
-        vz: (Math.random() - 0.5) * 0.5,
-        vw: (Math.random() - 0.5) * 2.0,
-        flashPhase: Math.random() * Math.PI * 2,
-        naturalFrequency: 2.1 + (Math.random() - 0.5) * 0.7, // ~0.35 Hz natural cycle
+        vx: (this.random.next() - 0.5) * 0.5,
+        vy: (this.random.next() - 0.5) * 0.3,
+        vz: (this.random.next() - 0.5) * 0.5,
+        vw: (this.random.next() - 0.5) * 2.0,
+        flashPhase: this.random.next() * Math.PI * 2,
+        naturalFrequency: 2.1 + (this.random.next() - 0.5) * 0.7, // ~0.35 Hz natural cycle
         flashIntensity: 0.1,
-        scale: 0.12 + Math.random() * 0.12, // Micro scale
+        scale: 0.12 + this.random.next() * 0.12, // Micro scale
         colorType,
         temporalAlpha: 1.0,
       });
@@ -395,7 +400,7 @@ export class BoidSimulation4D {
     }
   }
 
-  public update(dt: number) {
+  public update(dt: number, flowVector?: { x: number; y: number; z: number }) {
     const clampedDt = Math.min(dt, 0.05);
 
     // 1. Advance tank observation time
@@ -453,13 +458,13 @@ export class BoidSimulation4D {
     }
 
     // 4. Update Fish Boids (Macro & Meso)
-    this.updateFishBoids(clampedDt, wSpan);
+    this.updateFishBoids(clampedDt, wSpan, flowVector);
 
     // 5. Update Micro-Firefly Swarm (Kuramoto sync, wake reaction, Brownian drift)
-    this.updateFireflies(clampedDt, wSpan);
+    this.updateFireflies(clampedDt, wSpan, flowVector);
   }
 
-  private updateFishBoids(clampedDt: number, wSpan: number) {
+  private updateFishBoids(clampedDt: number, wSpan: number, flowVector?: { x: number; y: number; z: number }) {
     let sumX = 0, sumY = 0, sumZ = 0;
     let visibleCount = 0;
     let totalKinetic = 0;
@@ -560,29 +565,29 @@ export class BoidSimulation4D {
           }
         } else {
           // Subtle probability to explore a reef crevice, plant frond, or glass
-          if (Math.random() < 0.0025 && this.foodPellets.length === 0) {
-            b.curiosityTimer = 2.2 + Math.random() * 2.5;
-            const pick = Math.random();
+          if (this.random.next() < 0.0025 && this.foodPellets.length === 0) {
+            b.curiosityTimer = 2.2 + this.random.next() * 2.5;
+            const pick = this.random.next();
             if (pick < 0.45) {
               // Central rock cluster crevices
               b.curiosityTarget = {
-                x: -4.0 + Math.random() * 8.0,
-                y: -5.0 + Math.random() * 1.8,
-                z: -2.0 + Math.random() * 4.0,
+                x: -4.0 + this.random.next() * 8.0,
+                y: -5.0 + this.random.next() * 1.8,
+                z: -2.0 + this.random.next() * 4.0,
               };
             } else if (pick < 0.8) {
               // Lateral plant fronds
               b.curiosityTarget = {
-                x: (Math.random() > 0.5 ? 6.5 : -6.5) + (Math.random() - 0.5) * 3.0,
-                y: -3.8 + Math.random() * 3.5,
-                z: -2.5 + Math.random() * 4.0,
+                x: (this.random.next() > 0.5 ? 6.5 : -6.5) + (this.random.next() - 0.5) * 3.0,
+                y: -3.8 + this.random.next() * 3.5,
+                z: -2.5 + this.random.next() * 4.0,
               };
             } else {
               // Front glass inspection
               b.curiosityTarget = {
-                x: -7.0 + Math.random() * 14.0,
-                y: -3.5 + Math.random() * 6.0,
-                z: 4.8 + Math.random() * 0.8,
+                x: -7.0 + this.random.next() * 14.0,
+                y: -3.5 + this.random.next() * 6.0,
+                z: 4.8 + this.random.next() * 0.8,
               };
             }
           }
@@ -824,6 +829,14 @@ export class BoidSimulation4D {
         az += (b.vz / currentSpeed) * 0.08;
       }
 
+      // Environmental fluid current advection (Task 006 Priority 4)
+      if (flowVector) {
+        const flowCoupling = isMacro ? 0.35 : 0.85;
+        ax += (flowVector.x - b.vx * 0.15) * flowCoupling;
+        ay += (flowVector.y - b.vy * 0.15) * flowCoupling;
+        az += (flowVector.z - b.vz * 0.15) * flowCoupling;
+      }
+
       // Mass inertia division
       ax /= b.mass;
       ay /= b.mass;
@@ -895,7 +908,7 @@ export class BoidSimulation4D {
     }
   }
 
-  private updateFireflies(clampedDt: number, wSpan: number) {
+  private updateFireflies(clampedDt: number, wSpan: number, flowVector?: { x: number; y: number; z: number }) {
     const fireflyCount = this.fireflies.length;
     if (fireflyCount === 0) return;
 
@@ -994,8 +1007,13 @@ export class BoidSimulation4D {
       ay += (Math.random() - 0.5) * 0.9;
       az += (Math.random() - 0.5) * 1.2;
 
-      // 3. Gentle Convective Upwelling Current
+      // 3. Gentle Convective Upwelling Current & Environmental Flow Drift (Task 006 Priority 4)
       ay += Math.sin(fb.x * 0.35 + performance.now() * 0.001) * 0.3;
+      if (flowVector) {
+        ax += flowVector.x * 1.2;
+        ay += flowVector.y * 1.2;
+        az += flowVector.z * 1.2;
+      }
 
       // 4. Phototaxis (Attraction to canopy light / desk lamp)
       const ldx = this.lightTarget.x - fb.x;

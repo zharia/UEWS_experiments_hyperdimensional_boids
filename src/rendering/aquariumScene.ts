@@ -959,8 +959,9 @@ export class AquariumSceneManager {
       this.currentLookAt.lerp(this.targetLookAt, 0.05);
       this.camera.lookAt(this.currentLookAt);
 
-      // 2. Update 4D Boids simulation
-      this.boidSim.update(dt);
+      // 2. Update 4D Boids simulation with Environmental Fluid Current (Task 006 Priority 4)
+      const envFlow = this.ecologySim?.environment?.water?.flow;
+      this.boidSim.update(dt, envFlow);
 
       // 2b. Advance Gentle Circadian Day-Night Cycle if auto-cycle is enabled
       if (this.dayNightCycle.enabled && this.dayNightCycle.periodSeconds > 0) {
@@ -980,6 +981,46 @@ export class AquariumSceneManager {
     const boids = this.boidSim.boids;
     const boidCount = boids.length;
     this.fishMesh.count = boidCount;
+
+    // Bridge Ecological Agent state into physical boids (Task 006 Priority 3)
+    if (this.ecologySim?.agents && this.ecologySim.agents.length > 0) {
+      const agents = this.ecologySim.agents;
+      const macroAgents = agents.filter((a) => a.id.startsWith('macro_agent_'));
+      const mesoAgents = agents.filter((a) => a.id.startsWith('meso_agent_'));
+
+      for (let i = 0; i < boidCount; i++) {
+        const b = boids[i];
+        let linkedAgent: typeof agents[0] | undefined;
+
+        if (b.regime === 'macro_pelagic' && macroAgents.length > 0) {
+          const mIdx = i % macroAgents.length;
+          linkedAgent = macroAgents[mIdx];
+        } else if (mesoAgents.length > 0) {
+          const mesoIdx = (i - this.boidSim.macroCount) >= 0
+            ? (i - this.boidSim.macroCount) % mesoAgents.length
+            : i % mesoAgents.length;
+          linkedAgent = mesoAgents[mesoIdx];
+        }
+
+        if (linkedAgent) {
+          b.ecologicalAgentId = linkedAgent.id;
+          const activeBeh = linkedAgent.behaviour?.currentBehaviour?.type;
+          b.behaviourType = activeBeh;
+          b.energyLevel = linkedAgent.energy;
+          b.hungerDrive = linkedAgent.drives?.get('hunger') ?? 0.3;
+          b.fearDrive = linkedAgent.drives?.get('fear') ?? 0.1;
+
+          // Propagate urgent states (fleeing, startled, feeding, resting)
+          if (activeBeh === 'flee' || linkedAgent.startleCooldown > 0) {
+            b.isBursting = true;
+          } else if (activeBeh === 'rest') {
+            b.isBursting = false;
+          } else if (activeBeh === 'investigate') {
+            b.curiosityTimer = Math.max(b.curiosityTimer || 0, 1.5);
+          }
+        }
+      }
+    }
 
     // Update procedural morphological posture dynamics with multi-scalar hysteresis (Task 005)
     const flowVec = this.ecologySim?.environment?.water?.flow;
@@ -1312,12 +1353,16 @@ export class AquariumSceneManager {
         (this.tmpBubbleVec.y + 1.0) * 0.5
       );
 
-      this.ssdPass.update(
-        elapsedTime,
-        this.schoolScreenUv,
-        this.boidSim.schoolActivity,
-        this.bubbleScreenUv
-      );
+      // Throttle heavy screen-space post-processing updates when observer is ABSENT (Task 006 Priority 7)
+      const observerState = this.ecologySim?.observer?.state || 'WATCHING';
+      if (observerState !== 'ABSENT') {
+        this.ssdPass.update(
+          elapsedTime,
+          this.schoolScreenUv,
+          this.boidSim.schoolActivity,
+          this.bubbleScreenUv
+        );
+      }
 
       this.renderer.setRenderTarget(null);
       this.ssdPass.render(this.renderer);
@@ -1597,9 +1642,16 @@ export class AquariumSceneManager {
       const cfg = SPECIES_CONFIGS[b.speciesIndex] || SPECIES_CONFIGS[0];
       const speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy + b.vz * b.vz);
       let state = 'Cruising';
-      if (b.isBursting) state = 'Burst Propulsion';
-      else if (b.speed < 1.0) state = 'Gliding / Coasting';
-      else if (b.curiosityTimer && b.curiosityTimer > 0) state = 'Investigating Reef';
+      if (b.behaviourType) {
+        state = b.behaviourType.charAt(0).toUpperCase() + b.behaviourType.slice(1);
+        if (b.isBursting) state += ' (Burst)';
+      } else if (b.isBursting) {
+        state = 'Burst Propulsion';
+      } else if (b.speed < 1.0) {
+        state = 'Gliding / Coasting';
+      } else if (b.curiosityTimer && b.curiosityTimer > 0) {
+        state = 'Investigating Reef';
+      }
 
       const localAcoustic = this.ecologySim?.acousticField.sampleAt(b.x, b.y, b.z);
       const signature = this.ecologySim?.acousticField.getSignature();
@@ -1633,14 +1685,16 @@ export class AquariumSceneManager {
         w: parseFloat(b.w.toFixed(1)),
         scale: parseFloat(b.scale.toFixed(2)),
         state,
-        energy: Math.min(100, Math.round(65 + Math.sin(b.swimPhase) * 20)),
-        alertness: b.isBursting ? 0.8 : 0.2,
+        energy: b.energyLevel !== undefined
+          ? Math.round(b.energyLevel)
+          : Math.min(100, Math.round(65 + Math.sin(b.swimPhase) * 20)),
+        alertness: b.isBursting ? 0.8 : (b.fearDrive ? Math.max(0.2, b.fearDrive) : 0.2),
         colorHex: cfg.regime === 'macro_pelagic' ? '#c084fc' : '#38bdf8',
         perceivedAcousticDb: parseFloat(perceivedAcousticDb.toFixed(1)),
         acousticSensorySummary,
         isAcousticallyStartled: b.isBursting,
         morphology: (() => {
-          const telem = this.morphologyManager.getBoidTelemetry(idx);
+          const telem = this.morphologyManager.getBoidTelemetry(b.id || idx);
           if (!telem) return undefined;
           return {
             aspect: telem.signature.aspect,

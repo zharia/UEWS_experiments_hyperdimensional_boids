@@ -30,11 +30,44 @@ describe('Task 005 — Morphological Expression & Individual Boid Identity', () 
 
     it('retains individual signature across multiple queries in BoidMorphologyManager', () => {
       const manager = new BoidMorphologyManager(100, 7777);
-      const sigA = manager.getSignature(10, 0);
-      const sigB = manager.getSignature(10, 0);
+      const sigA = manager.getSignature('macro_agent_1', 0);
+      const sigB = manager.getSignature('macro_agent_1', 0);
 
       expect(sigA).toBe(sigB); // Strict object reference identity
-      expect(sigA.id).toBe(10);
+      expect(sigA.id).toBe('macro_agent_1');
+    });
+
+    it('binds morphology to organism ID rather than array position', () => {
+      const manager = new BoidMorphologyManager(100, 5005);
+      const boidA: Boid4D = {
+        id: 'boid_alpha',
+        x: 0, y: 0, z: 0, w: 50,
+        vx: 1, vy: 0, vz: 0, vw: 0,
+        speed: 1, scale: 1, speciesIndex: 1,
+        regime: 'meso_schooling', swimPhase: 0, temporalAlpha: 1, bioluminescence: 0.5, mass: 1
+      };
+      const boidB: Boid4D = {
+        id: 'boid_beta',
+        x: 1, y: 0, z: 0, w: 50,
+        vx: 1, vy: 0, vz: 0, vw: 0,
+        speed: 1, scale: 1, speciesIndex: 2,
+        regime: 'meso_schooling', swimPhase: 0, temporalAlpha: 1, bioluminescence: 0.5, mass: 1
+      };
+
+      // Frame 1: boidA at index 0, boidB at index 1
+      manager.update([boidA, boidB], 0.016);
+      const sigA1 = manager.getSignature('boid_alpha');
+      const sigB1 = manager.getSignature('boid_beta');
+
+      // Frame 2: swapped array order (e.g. after filtering / reordering)
+      manager.update([boidB, boidA], 0.016);
+      const sigA2 = manager.getSignature('boid_alpha');
+      const sigB2 = manager.getSignature('boid_beta');
+
+      expect(sigA1).toBe(sigA2);
+      expect(sigB1).toBe(sigB2);
+      expect(sigA1.id).toBe('boid_alpha');
+      expect(sigB1.id).toBe('boid_beta');
     });
   });
 
@@ -101,6 +134,9 @@ describe('Task 005 — Morphological Expression & Individual Boid Identity', () 
         signature.curvatureTendency + signature.asymmetryBias * 0.5,
         3
       );
+      // Deterministic wavePhase
+      const posture2 = PostureManager.createDefaultPosture(signature);
+      expect(posture.wavePhase).toBe(posture2.wavePhase);
     });
 
     it('prevents instantaneous frame snapping using multi-scalar temporal hysteresis', () => {
@@ -261,6 +297,7 @@ describe('Task 005 — Morphological Expression & Individual Boid Identity', () 
     it('updates population instanced buffer attributes efficiently', () => {
       const manager = new BoidMorphologyManager(20, 1111);
       const mockBoids: Boid4D[] = Array.from({ length: 20 }, (_, i) => ({
+        id: `mock_${i}`,
         x: i * 0.5,
         y: 0,
         z: 0,
@@ -268,9 +305,12 @@ describe('Task 005 — Morphological Expression & Individual Boid Identity', () 
         vx: 1.5,
         vy: 0.1,
         vz: 0.2,
+        vw: 0,
         speed: 1.52,
         scale: 1.0,
         speciesIndex: i % 4,
+        regime: 'meso_schooling' as const,
+        mass: 1.0,
         isBursting: i % 5 === 0,
         swimPhase: 0,
         temporalAlpha: 1.0,
@@ -286,7 +326,40 @@ describe('Task 005 — Morphological Expression & Individual Boid Identity', () 
 
       const telem = manager.getBoidTelemetry(0);
       expect(telem).not.toBeNull();
-      expect(telem?.signature.id).toBe(0);
+      expect(telem?.signature.id).toBe('mock_0');
+    });
+
+    it('modulates posture tension and compression based on linked ecological behaviourType', () => {
+      const manager = new BoidMorphologyManager(20, 2222);
+      const boidRest: Boid4D = {
+        id: 'boid_rest',
+        x: 0, y: 0, z: 0, w: 50,
+        vx: 1.0, vy: 0, vz: 0, vw: 0,
+        speed: 1.0, scale: 1.0, speciesIndex: 0,
+        regime: 'macro_pelagic', swimPhase: 0, temporalAlpha: 1.0, bioluminescence: 0.5, mass: 1,
+        behaviourType: 'rest',
+        isBursting: false,
+      };
+      const boidFlee: Boid4D = {
+        id: 'boid_flee',
+        x: 1, y: 0, z: 0, w: 50,
+        vx: 1.0, vy: 0, vz: 0, vw: 0,
+        speed: 1.0, scale: 1.0, speciesIndex: 0,
+        regime: 'macro_pelagic', swimPhase: 0, temporalAlpha: 1.0, bioluminescence: 0.5, mass: 1,
+        behaviourType: 'flee',
+        isBursting: true,
+      };
+
+      // Run multiple iterations so hysteresis converges toward target posture
+      for (let step = 0; step < 20; step++) {
+        manager.update([boidRest, boidFlee], 0.016);
+      }
+
+      const telemRest = manager.getBoidTelemetry('boid_rest');
+      const telemFlee = manager.getBoidTelemetry('boid_flee');
+
+      expect(telemFlee!.posture.propulsionTension).toBeGreaterThan(telemRest!.posture.propulsionTension);
+      expect(telemRest!.posture.compression).toBeLessThan(telemFlee!.posture.compression);
     });
   });
 });

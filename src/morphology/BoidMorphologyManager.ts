@@ -11,7 +11,7 @@ import {
 import { PostureState, PostureManager, PostureInputs } from './PostureState';
 
 export interface BoidMorphologyTelemetry {
-  id: number;
+  id: string | number;
   signature: MorphologicalSignature;
   posture: PostureState;
   turningCurvature: number;
@@ -19,15 +19,17 @@ export interface BoidMorphologyTelemetry {
 }
 
 /**
- * Central Morphology & Posture Manager (Task 005).
+ * Central Morphology & Posture Manager (Task 005 / Task 006).
  *
- * Maintains deterministic per-execution morphological signatures and applies
- * multi-scalar temporal hysteresis to posture dynamics for the entire boid population.
+ * Maintains deterministic per-execution morphological signatures tied to organism
+ * identities (rather than shifting array positions) and applies multi-scalar temporal
+ * hysteresis to posture dynamics for the entire boid population.
  */
 export class BoidMorphologyManager {
-  private signatures: Map<number, MorphologicalSignature> = new Map();
-  private postures: Map<number, PostureState> = new Map();
-  private prevVelocities: Map<number, { vx: number; vy: number; vz: number }> = new Map();
+  private signatures: Map<string | number, MorphologicalSignature> = new Map();
+  private postures: Map<string | number, PostureState> = new Map();
+  private prevVelocities: Map<string | number, { vx: number; vy: number; vz: number }> = new Map();
+  private indexToId: Map<number, string | number> = new Map();
 
   // Pre-allocated typed arrays for WebGL instanced buffer attributes
   public attrMorphology: Float32Array; // vec4: aspect, bodyDepth, taper, massDistribution
@@ -49,25 +51,25 @@ export class BoidMorphologyManager {
   }
 
   /**
-   * Retrieves or lazily creates the stable morphological signature for a boid.
+   * Retrieves or lazily creates the stable morphological signature for an organism by its identity.
    */
-  public getSignature(index: number, speciesIndex: number = 0): MorphologicalSignature {
-    let sig = this.signatures.get(index);
+  public getSignature(id: string | number, speciesIndex: number = 0): MorphologicalSignature {
+    let sig = this.signatures.get(id);
     if (!sig) {
-      sig = generateMorphologicalSignature(index, speciesIndex, this.seed);
-      this.signatures.set(index, sig);
+      sig = generateMorphologicalSignature(id, speciesIndex, this.seed);
+      this.signatures.set(id, sig);
     }
     return sig;
   }
 
   /**
-   * Retrieves or lazily initializes the posture state for a boid.
+   * Retrieves or lazily initializes the posture state for an organism by its identity.
    */
-  public getPosture(index: number, signature: MorphologicalSignature): PostureState {
-    let posture = this.postures.get(index);
+  public getPosture(id: string | number, signature: MorphologicalSignature): PostureState {
+    let posture = this.postures.get(id);
     if (!posture) {
       posture = PostureManager.createDefaultPosture(signature);
-      this.postures.set(index, posture);
+      this.postures.set(id, posture);
     }
     return posture;
   }
@@ -87,15 +89,18 @@ export class BoidMorphologyManager {
 
     for (let i = 0; i < count; i++) {
       const b = boids[i];
-      const sig = this.getSignature(i, b.speciesIndex);
-      const currentPosture = this.getPosture(i, sig);
+      // Use organism execution-local identity if defined, fallback to stable index
+      const organismId = b.id !== undefined ? b.id : i;
+      this.indexToId.set(i, organismId);
+      const sig = this.getSignature(organismId, b.speciesIndex);
+      const currentPosture = this.getPosture(organismId, sig);
 
       // Kinematic analysis from frame-to-frame velocity
-      const prevVel = this.prevVelocities.get(i) || { vx: b.vx, vy: b.vy, vz: b.vz };
+      const prevVel = this.prevVelocities.get(organismId) || { vx: b.vx, vy: b.vy, vz: b.vz };
       const ax = (b.vx - prevVel.vx) / clampedDt;
       const ay = (b.vy - prevVel.vy) / clampedDt;
       const az = (b.vz - prevVel.vz) / clampedDt;
-      this.prevVelocities.set(i, { vx: b.vx, vy: b.vy, vz: b.vz });
+      this.prevVelocities.set(organismId, { vx: b.vx, vy: b.vy, vz: b.vz });
 
       const speedSq = Math.max(0.001, b.vx * b.vx + b.vy * b.vy + b.vz * b.vz);
       const speed = Math.sqrt(speedSq);
@@ -124,6 +129,7 @@ export class BoidMorphologyManager {
         verticalPitch,
         isBursting: b.isBursting,
         environmentalFlowVelocity: flowInfluence,
+        behaviourType: b.behaviourType,
       };
 
       const targetPosture = PostureManager.computeTargetPosture(postureInputs, sig);
@@ -158,15 +164,19 @@ export class BoidMorphologyManager {
   }
 
   /**
-   * Retrieves telemetry for an inspected boid.
+   * Retrieves telemetry for an inspected boid by organism ID or array index.
    */
-  public getBoidTelemetry(index: number): BoidMorphologyTelemetry | null {
-    const sig = this.signatures.get(index);
-    const posture = this.postures.get(index);
+  public getBoidTelemetry(idOrIndex: string | number): BoidMorphologyTelemetry | null {
+    const key = typeof idOrIndex === 'number' && !this.signatures.has(idOrIndex) && this.indexToId.has(idOrIndex)
+      ? this.indexToId.get(idOrIndex)!
+      : idOrIndex;
+
+    const sig = this.signatures.get(key);
+    const posture = this.postures.get(key);
     if (!sig || !posture) return null;
 
     return {
-      id: index,
+      id: sig.id !== undefined ? sig.id : key,
       signature: { ...sig },
       posture: { ...posture },
       turningCurvature: posture.curvature,

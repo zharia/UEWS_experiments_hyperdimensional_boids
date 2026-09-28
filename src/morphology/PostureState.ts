@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { MorphologicalSignature } from './MorphologicalSignature';
+import { MorphologicalSignature, hashBoidId } from './MorphologicalSignature';
 
 /**
  * Instantaneous Physical Posture Configuration (Task 005).
@@ -48,6 +48,9 @@ export class PostureManager {
    * Creates a relaxed default posture initialized with individual resting curvature.
    */
   public static createDefaultPosture(signature: MorphologicalSignature): PostureState {
+    // Deterministic initial wave phase derived from signature ID (Task 006)
+    const seedPhase = ((hashBoidId(signature.id) % 1000) / 1000.0) * Math.PI * 2;
+
     return {
       curvature: signature.curvatureTendency + signature.asymmetryBias * 0.5,
       compression: 0.0,
@@ -55,7 +58,7 @@ export class PostureManager {
       propulsionTension: 0.25,
       turnIntensity: 0.0,
       bankAngle: 0.0,
-      wavePhase: Math.random() * Math.PI * 2,
+      wavePhase: seedPhase,
     };
   }
 

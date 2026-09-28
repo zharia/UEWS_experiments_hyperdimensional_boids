@@ -29,6 +29,9 @@ export interface BoidSpeciesConfig {
 }
 
 export interface Boid4D {
+  // Stable execution-local identity (Task 006)
+  id?: string;
+
   // 4D Position
   x: number;
   y: number;
@@ -56,6 +59,13 @@ export interface Boid4D {
   isBursting?: boolean; // Currently flapping caudal fin vs low-drag coasting
   curiosityTimer?: number; // Duration remaining investigating reef/substrate/cursor
   curiosityTarget?: { x: number; y: number; z: number };
+
+  // Ecological Agent Linkage (Task 006 Priority 3)
+  ecologicalAgentId?: string; // Linked EcologicalAgent ID
+  behaviourType?: string; // Active behaviour mode (wander, school, flee, feed, rest, etc.)
+  hungerDrive?: number; // Normalized drive [0, 1]
+  fearDrive?: number; // Normalized drive [0, 1]
+  energyLevel?: number; // Metabolic energy [0, 100]
 }
 
 export interface FireflyBoid4D {
