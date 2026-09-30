@@ -136,7 +136,7 @@ export class BoidSimulation4D {
       const speed = 1.6 + this.random.next() * 0.5;
 
       this.boids.push({
-        id: `boid_macro_${i}`,
+        id: `macro_agent_${i + 1}`,
         x,
         y,
         z,
@@ -177,7 +177,7 @@ export class BoidSimulation4D {
       const speed = 1.8 + this.random.next() * (cfg.maxSpeed - 1.8);
 
       this.boids.push({
-        id: `boid_meso_${i}`,
+        id: `meso_agent_${i + 1}`,
         x,
         y,
         z,

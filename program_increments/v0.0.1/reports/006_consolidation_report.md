@@ -14,7 +14,7 @@ Task 006 consolidated the major systems developed across Tasks 003, 004, and 005
 
 The primary achievements of this milestone are:
 1. Grounding morphological expression to stable execution-local organism identities rather than shifting array indices.
-2. Establishing a clean, bidirectional bridge from autonomous ecological agent cognition and drive states directly into boid physical kinematics and morphological posture dynamics.
+2. Establishing an authoritative, identity-based bridge from autonomous ecological agent cognition and drive states directly into boid physical kinematics and morphological posture dynamics (with antic feedback closing the loop back into environmental fields and agent affinity).
 3. Coupling authoritative environmental fluid flow into boid swarm and micro-firefly plankton advection.
 4. Closing the antic feedback loop back into local environmental fields and inter-agent social relationships.
 5. Removing uncontrolled randomness (`Math.random()`) from morphology initialisation and boid simulation decisions in favour of deterministic seeded pseudorandom streams.
@@ -50,9 +50,9 @@ During the preliminary architectural review of the codebase, several concrete di
   ```
 - Seeded `BoidSimulation4D` with `SeededRandom`, eliminating arbitrary `Math.random()` calls from boid instantiation and curiosity targeting.
 
-### 3. Complete Ecological ↔ Boid Integration
+### 3. Identity-Based Ecological → Boid Integration
 - Added linkage fields to `Boid4D`: `ecologicalAgentId`, `behaviourType`, `hungerDrive`, `fearDrive`, `energyLevel`.
-- In `AquariumSceneManager.render()`, established a synchronous bridge linking macro and meso boids to their corresponding `EcologicalAgent` entities.
+- In `AquariumSceneManager.render()`, established a synchronous identity-driven bridge linking macro and meso boids to their corresponding `EcologicalAgent` entities strictly by canonical organism ID (`macro_agent_1`, `meso_agent_1`, etc.), eliminating array position dependencies.
 - Forwarded `behaviourType` through `BoidMorphologyManager.update()` into `PostureInputs`, driving target propulsion tension and axial compression:
   - `flee` produces high propulsion tension ($0.95$) and spring compression.
   - `rest` produces low propulsion tension ($0.05$) and relaxed elongation (compression $-0.15$).
@@ -84,10 +84,11 @@ During the preliminary architectural review of the codebase, several concrete di
 
 ## Ecology / Boid Integration
 * **Status:** COMPLETED
-* The relationship between `EcologicalAgent` and `Boid4D` is clearly defined:
+* The relationship between `EcologicalAgent` and `Boid4D` is strictly identity-based:
   - `EcologicalAgent` acts as the cognitive authority (drives, memory, relationships, perception, lifecycle).
   - `Boid4D` acts as the physical, spatial, and visual manifestation substrate.
-  - Behavioral decisions propagate to boid flags and posture without turning swimming into canned animation clips.
+  - State propagation flows unidirectionally from ecological agent cognition into boid physical kinematics and posture flags, while antic event completion feeds back into the shared environmental and social state.
+  - Explicit organism identifiers (`macro_agent_1`, `meso_agent_1`, etc.) determine correspondence, eliminating hidden array index and modulo invariants.
 
 ---
 
@@ -166,7 +167,7 @@ During the preliminary architectural review of the codebase, several concrete di
 | `src/morphology/PostureState.ts` | Replaced `Math.random()` wave phase with deterministic hash derivation in `createDefaultPosture`. |
 | `src/morphology/BoidMorphologyManager.ts` | Updated internal maps to index by `string \| number` organism ID; passed `b.behaviourType` to `PostureInputs`. |
 | `src/simulation/boids4D.ts` | Integrated `SeededRandom`; assigned execution-local IDs; updated `update()` to accept `flowVector` and apply fluid advection to fish and plankton. |
-| `src/rendering/aquariumScene.ts` | Implemented EcologicalAgent $\leftrightarrow$ Boid4D state bridge in render loop; passed `envFlow` to `boidSim.update()`; optimized SSD pass on observer absence; linked dossier telemetry. |
+| `src/rendering/aquariumScene.ts` | Implemented identity-driven EcologicalAgent → Boid4D state bridge in render loop; passed `envFlow` to `boidSim.update()`; optimized SSD pass on observer absence; linked dossier telemetry. |
 | `src/simulation/EcologySimulation.ts` | Implemented antic feedback loop into inter-agent relationships and environmental nutrient/disturbance fields upon antic completion. |
 | `tests/morphology.test.ts` | Added unit tests for ID stability across reordering, deterministic wavePhase, and behaviour-driven posture modulation. |
 | `tests/task_006_consolidation.test.ts` | Created dedicated consolidation test suite covering all Task 006 integration priorities. |

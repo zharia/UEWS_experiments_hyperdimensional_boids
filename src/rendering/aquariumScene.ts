@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { BoidSimulation4D } from '../simulation/boids4D';
 import { ProceduralFloraSimulation } from '../simulation/flora';
-import { DayNightCycleConfig, InspectedOrganism, LightingConfig, LightingPreset } from '../types';
+import { Boid4D, DayNightCycleConfig, InspectedOrganism, LightingConfig, LightingPreset } from '../types';
 import { CoralSceneObjects, createCoralReef } from './coralGeometries';
 import { createFishGeometry, createFishShaderMaterial } from './fishShaders';
 import { createFireflyMesh, FireflyMeshSystem } from './fireflyShaders';
@@ -20,6 +20,7 @@ import { createWaterVolumeBackingMaterial } from './waterVolumeAtmosphere';
 import { SuspendedParticleSystem } from './suspendedParticles';
 import { SedimentPlumeSystem } from './sedimentPlume';
 import { EcologySimulation } from '../simulation/EcologySimulation';
+import { EcologicalAgent } from '../agents/agent/EcologicalAgent';
 import { Vector3D } from '../space/physical/Vector3D';
 import { BoidMorphologyManager } from '../morphology/BoidMorphologyManager';
 
@@ -154,6 +155,89 @@ export interface WaterSurfaceRipple {
   amplitude: number;
   speed: number;
   decay: number;
+}
+
+export interface IdentityBridgeStats {
+  matchedCount: number;
+  unmatchedBoidCount: number;
+  unmatchedAgentCount: number;
+  unmatchedBoidIds: string[];
+  unmatchedAgentIds: string[];
+}
+
+const warnedMissingBoidIds = new Set<string>();
+
+/**
+ * Authoritative, identity-driven bridge propagating EcologicalAgent states into physical Boid4D representations.
+ * Explicitly rejects array position and modulo arithmetic in favor of strict organism identifier matching (Task 006A).
+ */
+export function bridgeEcologicalStateToBoids(
+  agents: EcologicalAgent[],
+  boids: Boid4D[],
+  options?: { logMissing?: boolean }
+): IdentityBridgeStats {
+  const ecologicalAgentsById = new Map<string, EcologicalAgent>();
+  for (const agent of agents) {
+    ecologicalAgentsById.set(agent.id, agent);
+  }
+
+  let matchedCount = 0;
+  const unmatchedBoidIds: string[] = [];
+  const referencedAgentIds = new Set<string>();
+
+  for (let i = 0; i < boids.length; i++) {
+    const b = boids[i];
+    if (!b.id) {
+      b.ecologicalAgentId = undefined;
+      continue;
+    }
+
+    const linkedAgent = ecologicalAgentsById.get(b.id);
+    if (!linkedAgent) {
+      // Explicit unassociated handling: do NOT perform positional/modulo fallback
+      b.ecologicalAgentId = undefined;
+      unmatchedBoidIds.push(b.id);
+      if (options?.logMissing && !warnedMissingBoidIds.has(b.id)) {
+        warnedMissingBoidIds.add(b.id);
+        console.warn(`[IdentityBridge] Boid '${b.id}' has no corresponding EcologicalAgent; remaining unassociated.`);
+      }
+      continue;
+    }
+
+    referencedAgentIds.add(linkedAgent.id);
+    matchedCount++;
+
+    b.ecologicalAgentId = linkedAgent.id;
+    const activeBeh = linkedAgent.behaviour?.currentBehaviour?.type;
+    b.behaviourType = activeBeh;
+    b.energyLevel = linkedAgent.energy;
+    b.hungerDrive = linkedAgent.drives?.get('hunger') ?? 0.3;
+    b.fearDrive = linkedAgent.drives?.get('fear') ?? 0.1;
+
+    // Propagate urgent states (fleeing, startled, feeding, resting)
+    if (activeBeh === 'flee' || linkedAgent.startleCooldown > 0) {
+      b.isBursting = true;
+    } else if (activeBeh === 'rest') {
+      b.isBursting = false;
+    } else if (activeBeh === 'investigate') {
+      b.curiosityTimer = Math.max(b.curiosityTimer || 0, 1.5);
+    }
+  }
+
+  const unmatchedAgentIds: string[] = [];
+  for (const agent of agents) {
+    if (!referencedAgentIds.has(agent.id)) {
+      unmatchedAgentIds.push(agent.id);
+    }
+  }
+
+  return {
+    matchedCount,
+    unmatchedBoidCount: unmatchedBoidIds.length,
+    unmatchedAgentCount: unmatchedAgentIds.length,
+    unmatchedBoidIds,
+    unmatchedAgentIds,
+  };
 }
 
 export class AquariumSceneManager {
@@ -982,44 +1066,9 @@ export class AquariumSceneManager {
     const boidCount = boids.length;
     this.fishMesh.count = boidCount;
 
-    // Bridge Ecological Agent state into physical boids (Task 006 Priority 3)
+    // Bridge Ecological Agent state into physical boids using authoritative organism identity (Task 006A)
     if (this.ecologySim?.agents && this.ecologySim.agents.length > 0) {
-      const agents = this.ecologySim.agents;
-      const macroAgents = agents.filter((a) => a.id.startsWith('macro_agent_'));
-      const mesoAgents = agents.filter((a) => a.id.startsWith('meso_agent_'));
-
-      for (let i = 0; i < boidCount; i++) {
-        const b = boids[i];
-        let linkedAgent: typeof agents[0] | undefined;
-
-        if (b.regime === 'macro_pelagic' && macroAgents.length > 0) {
-          const mIdx = i % macroAgents.length;
-          linkedAgent = macroAgents[mIdx];
-        } else if (mesoAgents.length > 0) {
-          const mesoIdx = (i - this.boidSim.macroCount) >= 0
-            ? (i - this.boidSim.macroCount) % mesoAgents.length
-            : i % mesoAgents.length;
-          linkedAgent = mesoAgents[mesoIdx];
-        }
-
-        if (linkedAgent) {
-          b.ecologicalAgentId = linkedAgent.id;
-          const activeBeh = linkedAgent.behaviour?.currentBehaviour?.type;
-          b.behaviourType = activeBeh;
-          b.energyLevel = linkedAgent.energy;
-          b.hungerDrive = linkedAgent.drives?.get('hunger') ?? 0.3;
-          b.fearDrive = linkedAgent.drives?.get('fear') ?? 0.1;
-
-          // Propagate urgent states (fleeing, startled, feeding, resting)
-          if (activeBeh === 'flee' || linkedAgent.startleCooldown > 0) {
-            b.isBursting = true;
-          } else if (activeBeh === 'rest') {
-            b.isBursting = false;
-          } else if (activeBeh === 'investigate') {
-            b.curiosityTimer = Math.max(b.curiosityTimer || 0, 1.5);
-          }
-        }
-      }
+      bridgeEcologicalStateToBoids(this.ecologySim.agents, boids);
     }
 
     // Update procedural morphological posture dynamics with multi-scalar hysteresis (Task 005)
@@ -1555,7 +1604,7 @@ export class AquariumSceneManager {
           else if (b.curiosityTimer && b.curiosityTimer > 0) state = 'Investigating Reef';
 
           selected = {
-            id: `boid_${i}`,
+            id: b.id || `boid_${i}`,
             type: 'boid',
             speciesIndex: b.speciesIndex,
             name: cfg.name,
@@ -1635,10 +1684,10 @@ export class AquariumSceneManager {
    */
   public getInspectedOrganismLiveData(id: string): InspectedOrganism | null {
     if (!id) return null;
-    if (id.startsWith('boid_')) {
-      const idx = parseInt(id.replace('boid_', ''), 10);
-      const b = this.boidSim.boids[idx];
-      if (!b) return null;
+    const b = this.boidSim.boids.find((item) => item.id === id) ||
+      (id.startsWith('boid_') ? this.boidSim.boids[parseInt(id.replace('boid_', ''), 10)] : undefined);
+
+    if (b) {
       const cfg = SPECIES_CONFIGS[b.speciesIndex] || SPECIES_CONFIGS[0];
       const speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy + b.vz * b.vz);
       let state = 'Cruising';
@@ -1694,7 +1743,7 @@ export class AquariumSceneManager {
         acousticSensorySummary,
         isAcousticallyStartled: b.isBursting,
         morphology: (() => {
-          const telem = this.morphologyManager.getBoidTelemetry(b.id || idx);
+          const telem = this.morphologyManager.getBoidTelemetry(b.id || id);
           if (!telem) return undefined;
           return {
             aspect: telem.signature.aspect,
@@ -1826,6 +1875,22 @@ export class AquariumSceneManager {
     const nextPreset = order[(currIdx + 1) % order.length];
     this.setCameraPreset(nextPreset);
     return nextPreset;
+  }
+
+  /**
+   * Retrieves statistical diagnostics for organism identity coupling between EcologicalAgent and Boid4D representations.
+   */
+  public getIdentityCouplingStats(): IdentityBridgeStats {
+    if (!this.ecologySim?.agents || !this.boidSim?.boids) {
+      return {
+        matchedCount: 0,
+        unmatchedBoidCount: 0,
+        unmatchedAgentCount: 0,
+        unmatchedBoidIds: [],
+        unmatchedAgentIds: [],
+      };
+    }
+    return bridgeEcologicalStateToBoids(this.ecologySim.agents, this.boidSim.boids);
   }
 
   public getCameraPreset(): CameraPreset {
