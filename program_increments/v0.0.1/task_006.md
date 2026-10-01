@@ -544,24 +544,24 @@ Do not claim functionality is complete merely because its data structure exists.
 
 Task 006 is complete when:
 
-* [ ] Existing Tasks 003–005 functionality has been reviewed.
-* [ ] Significant incomplete functionality has been identified.
-* [ ] Existing incomplete functionality within scope has been completed.
-* [ ] Morphological identity is associated with organisms rather than array position.
-* [ ] Morphology/posture initialisation does not introduce uncontrolled randomness.
-* [ ] Morphology produces actual individual visual expression.
-* [ ] Ecological and boid systems have a clear working relationship.
-* [ ] Environmental state has observable consequences.
-* [ ] Acoustic state is connected to the simulated world.
-* [ ] Antics can produce consequences in the existing simulation.
-* [ ] Observer/idle behaviour works as intended.
-* [ ] Relevant deterministic behaviour is reproducible.
-* [ ] Tests pass.
-* [ ] The application runs successfully.
-* [ ] No major new subsystem has been introduced.
-* [ ] No morphology persistence has been introduced.
-* [ ] Documentation reflects the completed implementation.
-* [ ] `006_consolidation_report.md` has been committed.
+* [x] Existing Tasks 003–005 functionality has been reviewed.
+* [x] Significant incomplete functionality has been identified.
+* [x] Existing incomplete functionality within scope has been completed.
+* [x] Morphological identity is associated with organisms rather than array position.
+* [x] Morphology/posture initialisation does not introduce uncontrolled randomness.
+* [x] Morphology produces actual individual visual expression.
+* [x] Ecological and boid systems have a clear working relationship.
+* [x] Environmental state has observable consequences.
+* [x] Acoustic state is connected to the simulated world.
+* [x] Antics can produce consequences in the existing simulation.
+* [x] Observer/idle behaviour works as intended.
+* [x] Relevant deterministic behaviour is reproducible.
+* [x] Tests pass.
+* [x] The application runs successfully.
+* [x] No major new subsystem has been introduced.
+* [x] No morphology persistence has been introduced.
+* [x] Documentation reflects the completed implementation.
+* [x] `006_consolidation_report.md` has been committed.
 
 ---
 

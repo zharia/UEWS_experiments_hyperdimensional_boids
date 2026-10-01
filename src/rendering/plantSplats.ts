@@ -32,13 +32,16 @@ export interface PlantSplatSystemOptions {
   tipColor: THREE.Color;
   senescentColor?: THREE.Color;
   subsurfaceColor?: THREE.Color;
+  minY?: number;
+  maxY?: number;
+  swayStrength?: number;
 }
 
 /**
  * Creates a high-performance Leaf / Polyp Splat System.
  * Splats use oriented quad geometry with analytical 3D normal curvature,
  * procedural micro-venation, smin petiole blending, hydrodynamic flutter,
- * and biological lifecycle states (growth, chlorophyll bloom, chlorosis withering).
+ * coupled environmental water sway advection, and biological lifecycle states.
  */
 export function createPlantSplatMesh(options: PlantSplatSystemOptions): {
   mesh: THREE.Mesh;
@@ -46,6 +49,9 @@ export function createPlantSplatMesh(options: PlantSplatSystemOptions): {
 } {
   const { splats, baseColor, midColor, tipColor } = options;
   const count = splats.length;
+  const minY = options.minY ?? -6.8;
+  const maxY = options.maxY ?? -1.0;
+  const swayStrength = options.swayStrength ?? 0.35;
 
   if (count === 0) {
     const emptyGeo = new THREE.BufferGeometry();
@@ -160,6 +166,10 @@ export function createPlantSplatMesh(options: PlantSplatSystemOptions): {
       uGrowthScale: { value: 1.0 },   // 0.0 to 1.0 biological growth factor
       uWiltAmount: { value: 0.0 },     // 0.0 (turgid upright) to 1.0 (drooping under senescence)
       uChlorosis: { value: 0.0 },       // 0.0 (vibrant green) to 1.0 (yellowed senescent)
+      uHeightRange: { value: new THREE.Vector2(minY, maxY) },
+      uSwayStrength: { value: swayStrength },
+      uWaterFlow: { value: new THREE.Vector3(0, 0, 0) },
+      uWaterTurbulence: { value: 0.15 },
       uBaseColor: { value: baseColor },
       uMidColor: { value: midColor },
       uTipColor: { value: tipColor },
@@ -183,6 +193,10 @@ export function createPlantSplatMesh(options: PlantSplatSystemOptions): {
       uniform float uGrowthScale;
       uniform float uWiltAmount;
       uniform float uChlorosis;
+      uniform vec2 uHeightRange;
+      uniform float uSwayStrength;
+      uniform vec3 uWaterFlow;
+      uniform float uWaterTurbulence;
 
       varying vec2 vUv;
       varying vec3 vWorldPos;
@@ -228,19 +242,44 @@ export function createPlantSplatMesh(options: PlantSplatSystemOptions): {
         // Senescence drooping: gravitational sag downward along world Y
         float sag = pow(qV, 2.0) * uWiltAmount * 0.45;
 
-        // Hydrodynamic water flutter
+        // Hydrodynamic water flutter (high-frequency lamina ripple)
         float flutterPhase = uTime * 2.2 + phyllo * 1.618 + aOrigin.x * 0.4 + aOrigin.y * 0.3;
         float flutter = sin(flutterPhase) * (qV * 0.08 * (1.0 + uWiltAmount * 0.5));
         float twist = cos(flutterPhase * 0.8) * (qU * qV * 0.06);
 
-        // Displace along tangent, bitangent, and normal
-        vec3 displaced = aOrigin 
+        // --- 1. Host Stem Biological Growth & Wilt Displacement Synchronization ---
+        float totalH = max(0.001, uHeightRange.y - uHeightRange.x);
+        float h = clamp((aOrigin.y - uHeightRange.x) / totalH, 0.0, 1.0);
+
+        vec3 hostOrigin = aOrigin;
+        hostOrigin.y = uHeightRange.x + (aOrigin.y - uHeightRange.x) * uGrowthScale;
+        hostOrigin.x *= mix(0.35, 1.0, uGrowthScale);
+        hostOrigin.z *= mix(0.35, 1.0, uGrowthScale);
+
+        float stemWiltSag = pow(h, 2.2) * uWiltAmount * 1.4;
+        hostOrigin.y -= stemWiltSag;
+        hostOrigin.x += sin(hostOrigin.z * 1.5 + 0.8) * pow(h, 2.0) * uWiltAmount * 0.6;
+
+        // --- 2. Local Leaf Quad Displacement Around Host Origin ---
+        vec3 displaced = hostOrigin 
           + bitangent * (qU * leafWidth * 0.5 * widthFactor + twist)
           + tangent * (qV * leafLength)
           + normal * (arch + flutter)
           + vec3(0.0, -sag, 0.0);
 
         vec4 worldPos = modelMatrix * vec4(displaced, 1.0);
+
+        // --- 3. Hydrodynamic Water Current Sway & Laminar Flow Advection ---
+        float swayAmt = h * h * uSwayStrength * uGrowthScale;
+        float swayX = sin(uTime * 1.4 + worldPos.y * 0.35 + worldPos.z * 0.2) * (1.0 + uWaterTurbulence * 2.0) * swayAmt;
+        float swayZ = cos(uTime * 1.1 + worldPos.y * 0.3 + worldPos.x * 0.2) * (1.0 + uWaterTurbulence * 2.0) * (swayAmt * 0.7);
+
+        vec3 flowDisplacement = uWaterFlow * (h * h * 2.5);
+
+        worldPos.x += swayX + flowDisplacement.x;
+        worldPos.y += flowDisplacement.y * 0.3;
+        worldPos.z += swayZ + flowDisplacement.z;
+
         vWorldPos = worldPos.xyz;
 
         mat3 normalMatrix3 = mat3(modelMatrix);

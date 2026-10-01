@@ -7,10 +7,34 @@ import { Boid4D, FireflyBoid4D, FireflyCycleConfig, FoodPellet, ProcessRegimePre
 import { SPECIES_CONFIGS } from './species';
 import { SeededRandom } from '../core/random/SeededRandom';
 
+export interface Obstacle3D {
+  id?: string;
+  x: number;
+  y: number;
+  z: number;
+  rx: number;
+  ry: number;
+  rz: number;
+  repelStrength?: number;
+}
+
+export const DEFAULT_TANK_OBSTACLES: Obstacle3D[] = [
+  // 5 Sculpted Natural Reef Rocks (matching rockPositions in coralGeometries.ts scaled by base radius 2.4 + displacement)
+  { id: 'rock_left_deep', x: -9.5, y: -5.8, z: -2.0, rx: 4.4, ry: 3.4, rz: 3.9, repelStrength: 1.3 },
+  { id: 'rock_left_front', x: -7.0, y: -6.0, z: 1.5, rx: 3.4, ry: 2.9, rz: 3.2, repelStrength: 1.2 },
+  { id: 'rock_right_deep', x: 7.5, y: -5.9, z: -1.5, rx: 4.9, ry: 3.6, rz: 4.2, repelStrength: 1.35 },
+  { id: 'rock_right_front', x: 9.8, y: -5.6, z: 1.2, rx: 3.9, ry: 3.2, rz: 3.5, repelStrength: 1.25 },
+  { id: 'rock_center_bed', x: -0.5, y: -6.2, z: -2.8, rx: 5.3, ry: 2.7, rz: 3.7, repelStrength: 1.4 },
+  // 2 Diploria Brain Corals (Sphere radius 1.6 scaled by mesh transform)
+  { id: 'brain_coral_left', x: -6.5, y: -4.6, z: 0.5, rx: 1.9, ry: 1.6, rz: 1.8, repelStrength: 1.1 },
+  { id: 'brain_coral_right', x: 6.2, y: -4.8, z: -1.0, rx: 1.6, ry: 1.4, rz: 1.5, repelStrength: 1.1 },
+];
+
 export class BoidSimulation4D {
   public boids: Boid4D[] = [];
   public fireflies: FireflyBoid4D[] = [];
   public random: SeededRandom;
+  public obstacles: Obstacle3D[] = [...DEFAULT_TANK_OBSTACLES];
 
   public bounds: TankBounds = {
     minX: -14.0,
@@ -101,6 +125,10 @@ export class BoidSimulation4D {
     this.random = new SeededRandom(seed !== undefined ? seed : 5005);
     this.initSpatialGrid();
     this.initMultiScalarBoids();
+  }
+
+  public setObstacles(obstacles: Obstacle3D[]) {
+    this.obstacles = obstacles;
   }
 
   private initSpatialGrid() {
@@ -437,11 +465,34 @@ export class BoidSimulation4D {
       food.vx *= 0.98;
       food.vz *= 0.98;
 
+      // Check if food pellet hits tank substrate floor
       if (food.y < this.bounds.minY + 0.3) {
         food.y = this.bounds.minY + 0.3;
         food.vy = 0;
         food.vx = 0;
         food.vz = 0;
+      }
+
+      // Check if food pellet settles on top surface of any rock/coral obstacle
+      for (let o = 0; o < this.obstacles.length; o++) {
+        const obs = this.obstacles[o];
+        const nx = (food.x - obs.x) / obs.rx;
+        const ny = (food.y - obs.y) / obs.ry;
+        const nz = (food.z - obs.z) / obs.rz;
+        const distSq = nx * nx + ny * ny + nz * nz;
+        if (distSq < 1.05 && food.y >= obs.y) {
+          const horizDistSq = nx * nx + nz * nz;
+          if (horizDistSq < 0.95) {
+            const surfaceY = obs.y + obs.ry * Math.sqrt(Math.max(0, 1.0 - horizDistSq));
+            if (food.y <= surfaceY + 0.15) {
+              food.y = surfaceY + 0.08;
+              food.vy = 0;
+              food.vx *= 0.8;
+              food.vz *= 0.8;
+              break;
+            }
+          }
+        }
       }
 
       if (performance.now() - food.createdAt > 35000) {
@@ -569,12 +620,21 @@ export class BoidSimulation4D {
             b.curiosityTimer = 2.2 + this.random.next() * 2.5;
             const pick = this.random.next();
             if (pick < 0.45) {
-              // Central rock cluster crevices
-              b.curiosityTarget = {
-                x: -4.0 + this.random.next() * 8.0,
-                y: -5.0 + this.random.next() * 1.8,
-                z: -2.0 + this.random.next() * 4.0,
-              };
+              // Central rock cluster crevices (hovering gracefully above rock surface)
+              const cx = -4.0 + this.random.next() * 8.0;
+              const cz = -2.0 + this.random.next() * 4.0;
+              let safeY = -3.2 + this.random.next() * 1.5;
+              for (let o = 0; o < this.obstacles.length; o++) {
+                const obs = this.obstacles[o];
+                const nx = (cx - obs.x) / obs.rx;
+                const nz = (cz - obs.z) / obs.rz;
+                const hSq = nx * nx + nz * nz;
+                if (hSq < 1.0) {
+                  const rockCrest = obs.y + obs.ry * Math.sqrt(1.0 - hSq);
+                  safeY = Math.max(safeY, rockCrest + 0.6);
+                }
+              }
+              b.curiosityTarget = { x: cx, y: safeY, z: cz };
             } else if (pick < 0.8) {
               // Lateral plant fronds
               b.curiosityTarget = {
@@ -767,6 +827,96 @@ export class BoidSimulation4D {
       if (b.z < this.bounds.minZ + margin) az += Math.pow((this.bounds.minZ + margin - b.z) / margin, 2) * bWeight;
       if (b.z > this.bounds.maxZ - margin) az -= Math.pow((b.z - (this.bounds.maxZ - margin)) / margin, 2) * bWeight;
 
+      // Rock & Solid Reef Obstacle Avoidance (Anticipatory Horizon, Smooth Contour Steering & Outward Repulsion)
+      for (let o = 0; o < this.obstacles.length; o++) {
+        const obs = this.obstacles[o];
+        const nx = (b.x - obs.x) / obs.rx;
+        const ny = (b.y - obs.y) / obs.ry;
+        const nz = (b.z - obs.z) / obs.rz;
+        const distSq = nx * nx + ny * ny + nz * nz;
+        const dist = Math.sqrt(Math.max(0.0001, distSq));
+
+        // Predictive Lookahead along heading vector (1.2 - 2.5 seconds ahead)
+        const currentSpeed = Math.sqrt(b.vx * b.vx + b.vy * b.vy + b.vz * b.vz) || 0.01;
+        const headingX = b.vx / currentSpeed;
+        const headingY = b.vy / currentSpeed;
+        const headingZ = b.vz / currentSpeed;
+        const lookaheadDist = isMacro ? 3.0 : 1.8;
+        const aheadX = b.x + headingX * lookaheadDist;
+        const aheadY = b.y + headingY * lookaheadDist;
+        const aheadZ = b.z + headingZ * lookaheadDist;
+
+        const aheadNx = (aheadX - obs.x) / obs.rx;
+        const aheadNy = (aheadY - obs.y) / obs.ry;
+        const aheadNz = (aheadZ - obs.z) / obs.rz;
+        const aheadDistSq = aheadNx * aheadNx + aheadNy * aheadNy + aheadNz * aheadNz;
+
+        const awarenessDist = isMacro ? 1.65 : 1.45; // Awareness safety margin outside rock surface
+
+        if (distSq < awarenessDist * awarenessDist || aheadDistSq < 1.35 * 1.35) {
+          // Outward surface normal gradient (∇F / |∇F|)
+          const gx = nx / obs.rx;
+          const gy = ny / obs.ry;
+          const gz = nz / obs.rz;
+          const gLen = Math.sqrt(gx * gx + gy * gy + gz * gz) || 1;
+          const normX = gx / gLen;
+          const normY = gy / gLen;
+          const normZ = gz / gLen;
+
+          // Non-linear repulsion ramp as fish approaches rock surface
+          const penetration = dist < awarenessDist ? (awarenessDist - dist) / (awarenessDist - 1.0) : 0;
+          const aheadPenetration = aheadDistSq < 1.35 * 1.35 ? (1.35 - Math.sqrt(aheadDistSq)) / 0.35 : 0;
+          const totalUrgency = Math.max(penetration, aheadPenetration * 0.7);
+
+          const strength = (obs.repelStrength ?? 1.0) * (isMacro ? 24.0 : 16.0);
+          const repelForce = Math.pow(Math.max(0, totalUrgency), 1.6) * strength;
+          const massScale = isMacro ? b.mass : 1.0;
+
+          // 1. Normal repulsive force
+          if (penetration > 0) {
+            ax += normX * repelForce * massScale;
+            // Bias vertical repulsion upward to swim over the top / out into open water
+            ay += (normY >= 0 ? normY * 1.1 : normY * 0.35) * repelForce * massScale;
+            az += normZ * repelForce * massScale;
+          }
+
+          // 2. Tangential Contour Steering: deflect velocity smoothly around the rock
+          const vDotN = (b.vx * normX + b.vy * normY + b.vz * normZ);
+          if (vDotN < 0 || aheadPenetration > 0) {
+            // Heading toward obstacle: project velocity onto tangent plane
+            let tanVx = b.vx - vDotN * normX;
+            let tanVy = b.vy - vDotN * normY;
+            let tanVz = b.vz - vDotN * normZ;
+            let tanSpeed = Math.sqrt(tanVx * tanVx + tanVy * tanVy + tanVz * tanVz);
+
+            if (tanSpeed > 0.02) {
+              tanVx /= tanSpeed;
+              tanVy /= tanSpeed;
+              tanVz /= tanSpeed;
+            } else {
+              // Direct head-on collision: induce horizontal lateral slip or crest lift
+              tanVx = -normZ;
+              tanVy = normY > 0 ? 0.7 : 0.0;
+              tanVz = normX;
+              const len = Math.sqrt(tanVx * tanVx + tanVy * tanVy + tanVz * tanVz) || 1;
+              tanVx /= len;
+              tanVy /= len;
+              tanVz /= len;
+            }
+
+            // Encourage swimming over top or around sides rather than pitching downward into sand
+            if (normY > -0.2 && tanVy < 0) {
+              tanVy = Math.max(0.1, -tanVy * 0.5);
+            }
+
+            const deflectStrength = (obs.repelStrength ?? 1.0) * (isMacro ? 18.0 : 12.0) * totalUrgency;
+            ax += tanVx * deflectStrength * massScale;
+            ay += tanVy * deflectStrength * massScale;
+            az += tanVz * deflectStrength * massScale;
+          }
+        }
+      }
+
       // Temporal boundaries
       if (b.w < this.bounds.minW) b.w += wSpan;
       if (b.w > this.bounds.maxW) b.w -= wSpan;
@@ -883,6 +1033,58 @@ export class BoidSimulation4D {
       if (b.y > this.bounds.maxY - 0.4) { b.y = this.bounds.maxY - 0.4; b.vy = -Math.abs(b.vy); }
       if (b.z < this.bounds.minZ) { b.z = this.bounds.minZ; b.vz = Math.abs(b.vz); }
       if (b.z > this.bounds.maxZ) { b.z = this.bounds.maxZ; b.vz = -Math.abs(b.vz); }
+
+      // Obstacle penetration clamp: multi-pass projection ensures clean resolution across compound/adjacent obstacles
+      for (let pass = 0; pass < 3; pass++) {
+        let maxPenetration = 0;
+        let deepestObs: Obstacle3D | null = null;
+        let deepestNx = 0;
+        let deepestNy = 0;
+        let deepestNz = 0;
+        let deepestDist = 1;
+
+        for (let o = 0; o < this.obstacles.length; o++) {
+          const obs = this.obstacles[o];
+          const nx = (b.x - obs.x) / obs.rx;
+          const ny = (b.y - obs.y) / obs.ry;
+          const nz = (b.z - obs.z) / obs.rz;
+          const distSq = nx * nx + ny * ny + nz * nz;
+          if (distSq < 1.0) {
+            const dist = Math.sqrt(Math.max(0.0001, distSq));
+            const pen = 1.0 - dist;
+            if (pen > maxPenetration) {
+              maxPenetration = pen;
+              deepestObs = obs;
+              deepestNx = nx;
+              deepestNy = ny;
+              deepestNz = nz;
+              deepestDist = dist;
+            }
+          }
+        }
+
+        if (!deepestObs) break;
+
+        const pushOut = 1.025 / deepestDist;
+        b.x = deepestObs.x + deepestNx * pushOut * deepestObs.rx;
+        b.y = deepestObs.y + deepestNy * pushOut * deepestObs.ry;
+        b.z = deepestObs.z + deepestNz * pushOut * deepestObs.rz;
+
+        // Eliminate and deflect velocity directed into rock interior
+        const gx = deepestNx / deepestObs.rx;
+        const gy = deepestNy / deepestObs.ry;
+        const gz = deepestNz / deepestObs.rz;
+        const gLen = Math.sqrt(gx * gx + gy * gy + gz * gz) || 1;
+        const normX = gx / gLen;
+        const normY = gy / gLen;
+        const normZ = gz / gLen;
+        const vDotN = b.vx * normX + b.vy * normY + b.vz * normZ;
+        if (vDotN < 0) {
+          b.vx -= vDotN * normX * 1.35;
+          b.vy -= vDotN * normY * 1.35;
+          b.vz -= vDotN * normZ * 1.35;
+        }
+      }
 
       // Intermittent Swim Phase: Active tail strokes during burst, smooth glide during coast
       if (!isMacro) {
@@ -1058,6 +1260,22 @@ export class BoidSimulation4D {
       if (fb.y > this.bounds.maxY - 0.5) { fb.y = this.bounds.maxY - 0.5; fb.vy = -Math.abs(fb.vy); }
       if (fb.z < this.bounds.minZ + 0.5) { fb.z = this.bounds.minZ + 0.5; fb.vz = Math.abs(fb.vz); }
       if (fb.z > this.bounds.maxZ - 0.5) { fb.z = this.bounds.maxZ - 0.5; fb.vz = -Math.abs(fb.vz); }
+
+      // Obstacle penetration clamp for plankton
+      for (let o = 0; o < this.obstacles.length; o++) {
+        const obs = this.obstacles[o];
+        const nx = (fb.x - obs.x) / obs.rx;
+        const ny = (fb.y - obs.y) / obs.ry;
+        const nz = (fb.z - obs.z) / obs.rz;
+        const distSq = nx * nx + ny * ny + nz * nz;
+        if (distSq < 1.0 && distSq > 0.0001) {
+          const dist = Math.sqrt(distSq);
+          const pushOut = 1.02 / dist;
+          fb.x = obs.x + nx * pushOut * obs.rx;
+          fb.y = obs.y + ny * pushOut * obs.ry;
+          fb.z = obs.z + nz * pushOut * obs.rz;
+        }
+      }
 
       if (fb.w < this.bounds.minW) fb.w += wSpan;
       if (fb.w > this.bounds.maxW) fb.w -= wSpan;

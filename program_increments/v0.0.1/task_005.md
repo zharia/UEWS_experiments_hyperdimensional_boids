@@ -1225,32 +1225,32 @@ Document the conceptual distinction:
 
 Task 005 is complete only when all of the following are true:
 
-* [ ] Existing boid architecture has been inspected.
-* [ ] Individual morphological signatures exist.
-* [ ] Morphology is parameterised rather than represented solely by fixed meshes.
-* [ ] Multiple morphological dimensions are supported.
-* [ ] Individual variation is coherent rather than independently random.
-* [ ] Controlled asymmetry exists.
-* [ ] Posture is distinct from morphology.
-* [ ] Posture responds to locomotion.
-* [ ] Posture has temporal continuity/hysteresis.
-* [ ] Behaviour influences expression without becoming animation.
-* [ ] Flock state can subtly influence expression.
-* [ ] Environmental state can influence expression.
-* [ ] Existing colour-phase behaviour remains intact.
-* [ ] Individual visual signatures remain distinguishable during execution.
-* [ ] No conventional fish anatomy is required.
-* [ ] No fixed animation loops define movement.
-* [ ] Randomness is deterministic and bounded.
-* [ ] Geometry remains stable and valid.
-* [ ] Performance remains acceptable.
-* [ ] Debug instrumentation exists.
-* [ ] Automated tests pass.
-* [ ] Qualitative visual evaluation has been performed.
-* [ ] Long-duration execution evaluation has been performed.
-* [ ] Documentation has been updated.
-* [ ] No existing ecological, behavioural, environmental, acoustic, or observer invariants have been violated.
-* [ ] No new persistence mechanism has been introduced.
+* [x] Existing boid architecture has been inspected.
+* [x] Individual morphological signatures exist.
+* [x] Morphology is parameterised rather than represented solely by fixed meshes.
+* [x] Multiple morphological dimensions are supported.
+* [x] Individual variation is coherent rather than independently random.
+* [x] Controlled asymmetry exists.
+* [x] Posture is distinct from morphology.
+* [x] Posture responds to locomotion.
+* [x] Posture has temporal continuity/hysteresis.
+* [x] Behaviour influences expression without becoming animation.
+* [x] Flock state can subtly influence expression.
+* [x] Environmental state can influence expression.
+* [x] Existing colour-phase behaviour remains intact.
+* [x] Individual visual signatures remain distinguishable during execution.
+* [x] No conventional fish anatomy is required.
+* [x] No fixed animation loops define movement.
+* [x] Randomness is deterministic and bounded.
+* [x] Geometry remains stable and valid.
+* [x] Performance remains acceptable.
+* [x] Debug instrumentation exists.
+* [x] Automated tests pass.
+* [x] Qualitative visual evaluation has been performed.
+* [x] Long-duration execution evaluation has been performed.
+* [x] Documentation has been updated.
+* [x] No existing ecological, behavioural, environmental, acoustic, or observer invariants have been violated.
+* [x] No new persistence mechanism has been introduced.
 
 ---
 

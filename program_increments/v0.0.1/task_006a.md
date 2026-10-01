@@ -702,27 +702,27 @@ Record any issues discovered but intentionally left outside scope.
 
 Task 006A is complete only when all of the following are true:
 
-* [ ] ecological-agent identity has been identified;
-* [ ] boid identity has been identified;
-* [ ] corresponding organisms use the same identity;
-* [ ] bridge lookup is identity-based;
-* [ ] positional/modulo association has been removed from organism matching;
-* [ ] ecological population reordering does not break associations;
-* [ ] boid population reordering does not break associations;
-* [ ] missing organisms do not cause accidental reassignment;
-* [ ] existing Task 006 morphology identity remains intact;
-* [ ] deterministic simulation remains intact;
-* [ ] environmental coupling remains intact;
-* [ ] acoustic coupling remains intact;
-* [ ] antic feedback remains intact;
-* [ ] observer-independent simulation remains intact;
-* [ ] all existing tests pass;
-* [ ] new identity tests pass;
-* [ ] application builds successfully;
-* [ ] application runs successfully;
-* [ ] Task 006 documentation accurately describes the implementation;
-* [ ] `006a_identity_conformance_report.md` exists;
-* [ ] no major new subsystem has been introduced.
+* [x] ecological-agent identity has been identified;
+* [x] boid identity has been identified;
+* [x] corresponding organisms use the same identity;
+* [x] bridge lookup is identity-based;
+* [x] positional/modulo association has been removed from organism matching;
+* [x] ecological population reordering does not break associations;
+* [x] boid population reordering does not break associations;
+* [x] missing organisms do not cause accidental reassignment;
+* [x] existing Task 006 morphology identity remains intact;
+* [x] deterministic simulation remains intact;
+* [x] environmental coupling remains intact;
+* [x] acoustic coupling remains intact;
+* [x] antic feedback remains intact;
+* [x] observer-independent simulation remains intact;
+* [x] all existing tests pass;
+* [x] new identity tests pass;
+* [x] application builds successfully;
+* [x] application runs successfully;
+* [x] Task 006 documentation accurately describes the implementation;
+* [x] `006a_identity_conformance_report.md` exists;
+* [x] no major new subsystem has been introduced.
 
 ---
 

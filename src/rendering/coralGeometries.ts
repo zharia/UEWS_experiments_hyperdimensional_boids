@@ -212,6 +212,9 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
     tipColor: new THREE.Color(0xff6ef0),
     senescentColor: new THREE.Color(0x8a5528),
     subsurfaceColor: new THREE.Color(0xff88f5),
+    minY: -6.8,
+    maxY: -1.2,
+    swayStrength: 0.22,
   });
   plantMaterials.push(treeSplats1.material);
 
@@ -272,6 +275,9 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
     tipColor: new THREE.Color(0xfde047),
     senescentColor: new THREE.Color(0x73401c),
     subsurfaceColor: new THREE.Color(0xfef08a),
+    minY: -6.8,
+    maxY: -1.0,
+    swayStrength: 0.24,
   });
   plantMaterials.push(treeSplats2.material);
 
@@ -331,6 +337,9 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
     tipColor: new THREE.Color(0xbbf7d0),
     senescentColor: new THREE.Color(0xb58025),
     subsurfaceColor: new THREE.Color(0xa3e635),
+    minY: -6.8,
+    maxY: 1.5,
+    swayStrength: 0.45,
   });
   plantMaterials.push(kelpSplats1.material);
 
@@ -390,6 +399,9 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
     tipColor: new THREE.Color(0xa5f3fc),
     senescentColor: new THREE.Color(0x78602b),
     subsurfaceColor: new THREE.Color(0x67e8f9),
+    minY: -6.8,
+    maxY: 1.2,
+    swayStrength: 0.42,
   });
   plantMaterials.push(kelpSplats2.material);
 
@@ -449,6 +461,9 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
     tipColor: new THREE.Color(0xfb7185), // rose apical feather tips
     senescentColor: new THREE.Color(0x996d28),
     subsurfaceColor: new THREE.Color(0x86efac),
+    minY: -6.8,
+    maxY: 0.2,
+    swayStrength: 0.36,
   });
   plantMaterials.push(milfoilSplats.material);
 
@@ -508,6 +523,9 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
     tipColor: new THREE.Color(0x4ade80),
     senescentColor: new THREE.Color(0xa87422),
     subsurfaceColor: new THREE.Color(0x86efac),
+    minY: -6.4,
+    maxY: -1.2,
+    swayStrength: 0.28,
   });
   plantMaterials.push(swordSplats.material);
 
