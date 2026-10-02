@@ -6,6 +6,7 @@
 export type BenchmarkStage =
   | 'boidsPhysics'
   | 'floraSim'
+  | 'landscapeEvolution'
   | 'instancedFish'
   | 'instancedFireflies'
   | 'ambientObjects'
@@ -73,6 +74,7 @@ export class PerformanceBenchmarkEngine {
     instancedFireflies: 0,
     ambientObjects: 0,
     plantLifecycle: 0,
+    landscapeEvolution: 0,
     microFaunaSim: 0,
     microFaunaRender: 0,
     webglRender: 0,
@@ -87,6 +89,7 @@ export class PerformanceBenchmarkEngine {
     instancedFireflies: 0,
     ambientObjects: 0,
     plantLifecycle: 0,
+    landscapeEvolution: 0,
     microFaunaSim: 0,
     microFaunaRender: 0,
     webglRender: 0,
@@ -206,6 +209,7 @@ export class PerformanceBenchmarkEngine {
       instancedFireflies: this.currentStages.instancedFireflies,
       ambientObjects: this.currentStages.ambientObjects,
       plantLifecycle: this.currentStages.plantLifecycle,
+      landscapeEvolution: this.currentStages.landscapeEvolution,
       microFaunaSim: this.currentStages.microFaunaSim,
       microFaunaRender: this.currentStages.microFaunaRender,
       webglRender: this.currentStages.webglRender,
@@ -235,6 +239,7 @@ export class PerformanceBenchmarkEngine {
         instancedFireflies: 'Firefly Instanced Buffers',
         ambientObjects: 'Ambient Uniforms & Bubbles',
         plantLifecycle: 'Botanical Lifecycle & Splats',
+        landscapeEvolution: '4D Landscape Evolution & Projection',
         microFaunaSim: 'Micro-Fauna State Simulation',
         microFaunaRender: 'Soft-Body Verlet / Mesh Deformation',
         webglRender: 'Three.js WebGL Render Call',
@@ -342,6 +347,7 @@ export class PerformanceBenchmarkEngine {
       instancedFireflies: Math.round((this.stageAccumulators.instancedFireflies / sampleDiv) * 100) / 100,
       ambientObjects: Math.round((this.stageAccumulators.ambientObjects / sampleDiv) * 100) / 100,
       plantLifecycle: Math.round((this.stageAccumulators.plantLifecycle / sampleDiv) * 100) / 100,
+      landscapeEvolution: Math.round((this.stageAccumulators.landscapeEvolution / sampleDiv) * 100) / 100,
       microFaunaSim: Math.round((this.stageAccumulators.microFaunaSim / sampleDiv) * 100) / 100,
       microFaunaRender: Math.round((this.stageAccumulators.microFaunaRender / sampleDiv) * 100) / 100,
       webglRender: Math.round((this.stageAccumulators.webglRender / sampleDiv) * 100) / 100,

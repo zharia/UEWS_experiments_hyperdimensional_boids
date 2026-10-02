@@ -13,11 +13,17 @@ import {
 import { BoidSimulation4D } from './boids4D';
 import { ProceduralFloraSimulation } from './flora';
 import { aquariumAudio } from '../audio/aquariumAudio';
+import { LandscapeProjection } from '../landscape/LandscapeProjection';
 
 /**
- * Calculates the exact seabed height at (x, z) to match the procedural sand dunes.
+ * Calculates the exact seabed height at (x, z) to match the procedural sand dunes
+ * or live 4D evolving landscape projection.
  */
 export function getSandBedHeight(x: number, z: number): number {
+  const activeProj = LandscapeProjection.getActive();
+  if (activeProj) {
+    return activeProj.getHeightAt(x, z);
+  }
   const macroDunes = Math.sin(x * 0.25) * 0.35 + Math.cos(z * 0.4) * 0.25;
   const currentRipples = Math.sin(x * 1.6 + z * 0.8) * 0.12 + Math.cos(x * 2.4 - z * 1.2) * 0.06;
   const microHollows = Math.sin(x * 4.0 + z * 3.0) * 0.03;

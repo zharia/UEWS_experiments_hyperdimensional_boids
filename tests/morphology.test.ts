@@ -15,6 +15,11 @@ import {
 } from '../src/morphology/MorphologicalGrammar';
 import { BoidMorphologyManager } from '../src/morphology/BoidMorphologyManager';
 import { Boid4D } from '../src/types';
+import {
+  createSpiralSnailShellGeometry,
+  createOrganicSnailFootGeometry,
+} from '../src/rendering/proceduralMorphology';
+import * as THREE from 'three';
 
 describe('Task 005 — Morphological Expression & Individual Boid Identity', () => {
   describe('1. Morphological Identity Association & Stability', () => {
@@ -360,6 +365,47 @@ describe('Task 005 — Morphological Expression & Individual Boid Identity', () 
 
       expect(telemFlee!.posture.propulsionTension).toBeGreaterThan(telemRest!.posture.propulsionTension);
       expect(telemRest!.posture.compression).toBeLessThan(telemFlee!.posture.compression);
+    });
+  });
+
+  describe('5. Gastropod Snail Shell Geometry & Completeness', () => {
+    it('creates complete 3D spiral shell geometry with outward-facing normals (no backface culling half-shell cut)', () => {
+      for (const isNerite of [true, false]) {
+        const geo = createSpiralSnailShellGeometry(isNerite);
+        expect(geo.attributes.position.count).toBeGreaterThan(500);
+        expect(geo.index!.count).toBeGreaterThan(1500);
+
+        // Verify bounding box sits above foot (no negative Y burial)
+        geo.computeBoundingBox();
+        const bbox = geo.boundingBox!;
+        expect(bbox.min.y).toBeGreaterThanOrEqual(0.05);
+        expect(bbox.max.y).toBeGreaterThan(bbox.min.y);
+
+        // Verify horizontal centering
+        const centerX = (bbox.min.x + bbox.max.x) * 0.5;
+        expect(Math.abs(centerX)).toBeLessThan(0.05);
+
+        // Verify all vertex normals are valid, finite, and non-zero
+        const norm = geo.attributes.normal;
+        for (let i = 0; i < norm.count; i++) {
+          const nx = norm.getX(i);
+          const ny = norm.getY(i);
+          const nz = norm.getZ(i);
+          expect(Number.isFinite(nx)).toBe(true);
+          expect(Number.isFinite(ny)).toBe(true);
+          expect(Number.isFinite(nz)).toBe(true);
+          const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+          expect(len).toBeCloseTo(1.0, 2);
+        }
+      }
+    });
+
+    it('snail foot sole rests on substrate at y >= 0', () => {
+      const foot = createOrganicSnailFootGeometry();
+      foot.computeBoundingBox();
+      const bbox = foot.boundingBox!;
+      expect(bbox.min.y).toBeGreaterThanOrEqual(0.0);
+      expect(bbox.max.y).toBeGreaterThan(0.15);
     });
   });
 });

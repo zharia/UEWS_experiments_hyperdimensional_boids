@@ -18,6 +18,7 @@ import { PlantLifecycleSimulation } from '../simulation/plantLifecycle';
 
 export interface CoralSceneObjects {
   coralGroup: THREE.Group;
+  sandMesh: THREE.Mesh;
   anemoneMesh: THREE.InstancedMesh;
   anemoneBasePositions: THREE.Vector3[];
   bubbleSystem: THREE.Points;
@@ -682,6 +683,7 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
 
   return {
     coralGroup,
+    sandMesh,
     anemoneMesh,
     anemoneBasePositions,
     bubbleSystem,

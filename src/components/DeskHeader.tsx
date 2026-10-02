@@ -15,6 +15,7 @@ import {
   Fish,
   HelpCircle,
   Moon,
+  Mountain,
   Sparkles,
   Sprout,
   Sun,
@@ -39,6 +40,7 @@ interface DeskHeaderProps {
   onOpenBenchmark?: () => void;
   onOpenBotanical?: () => void;
   onOpenEcology?: () => void;
+  onOpenLandscape?: () => void;
 }
 
 export const DeskHeader: React.FC<DeskHeaderProps> = ({
@@ -53,6 +55,7 @@ export const DeskHeader: React.FC<DeskHeaderProps> = ({
   onOpenBenchmark,
   onOpenBotanical,
   onOpenEcology,
+  onOpenLandscape,
 }) => {
   const [isMuted, setIsMuted] = useState(aquariumAudio.getIsMuted());
   const [volume, setVolumeState] = useState(aquariumAudio.getVolume());
@@ -249,6 +252,19 @@ export const DeskHeader: React.FC<DeskHeaderProps> = ({
           >
             <Sprout className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
             <span>Botanical Flora</span>
+          </button>
+        )}
+
+        {/* Dynamic 4D Landscape Evolution Modal Trigger */}
+        {onOpenLandscape && (
+          <button
+            id="btn-header-landscape"
+            onClick={onOpenLandscape}
+            title="Inspect Dynamic 4D Landscape Evolution, Geometry & Topology (Hotkey: G)"
+            className="flex items-center gap-1.5 bg-amber-950/80 hover:bg-amber-900/90 backdrop-blur-md px-2.5 py-1.5 rounded-lg border border-amber-700/60 text-xs font-mono text-amber-300 transition-all cursor-pointer shadow-sm group"
+          >
+            <Mountain className="w-3.5 h-3.5 text-amber-400 group-hover:scale-110 transition-transform" />
+            <span>4D Landscape</span>
           </button>
         )}
 

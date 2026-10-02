@@ -35,6 +35,7 @@ const SHORTCUTS: ShortcutItem[] = [
   { keyLabel: '4', action: 'Midnight Abyssal Preset', category: 'Lighting' },
   { keyLabel: 'B', action: 'Performance Benchmarking HUD', category: 'Diagnostics' },
   { keyLabel: 'E', action: 'Ecosystem Intelligence & Causal Ledger', category: 'Diagnostics' },
+  { keyLabel: 'G', action: '4D Landscape Evolution, Geometry & Topology HUD', category: 'Diagnostics' },
   { keyLabel: 'Esc', action: 'Deselect Organism / Close Modals', category: 'General' },
 ];
 

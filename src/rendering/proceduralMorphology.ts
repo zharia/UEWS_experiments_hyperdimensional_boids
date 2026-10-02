@@ -691,15 +691,15 @@ export function createHighResolutionHermitShellGeometry(): THREE.BufferGeometry 
 export function createSpiralSnailShellGeometry(isNerite: boolean): THREE.BufferGeometry {
   const steps = isNerite ? 68 : 80;
   const radialSegments = 24;
-  const turns = isNerite ? 2.4 : 3.5;
+  const turns = isNerite ? 2.4 : 3.4;
 
   const vertices: number[] = [];
   const uvs: number[] = [];
   const indices: number[] = [];
 
-  const a = 0.038;
-  const b = isNerite ? 0.21 : 0.16;
-  const pitch = isNerite ? 0.048 : 0.082;
+  const a = isNerite ? 0.018 : 0.016;
+  const b = isNerite ? 0.18 : 0.135;
+  const pitch = isNerite ? 0.032 : 0.055;
 
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
@@ -710,7 +710,7 @@ export function createSpiralSnailShellGeometry(isNerite: boolean): THREE.BufferG
     const sz = Math.sin(theta) * rSpiral;
     const sy = t * pitch * theta;
 
-    const tubeRadius = rSpiral * (isNerite ? 0.64 : 0.48);
+    const tubeRadius = rSpiral * (isNerite ? 0.55 : 0.45);
 
     const tangent = new THREE.Vector3(
       -Math.sin(theta) * rSpiral + Math.cos(theta) * rSpiral * b,
@@ -721,17 +721,14 @@ export function createSpiralSnailShellGeometry(isNerite: boolean): THREE.BufferG
     const normal = new THREE.Vector3(Math.cos(theta), 0.25, Math.sin(theta)).normalize();
     const binormal = new THREE.Vector3().crossVectors(tangent, normal).normalize();
 
-    const flare = 1.0 + Math.pow(Math.max(0, (t - 0.82) / 0.18), 2.2) * 0.75;
+    const flare = 1.0 + Math.pow(Math.max(0, (t - 0.85) / 0.15), 2.0) * 0.35;
 
     for (let j = 0; j <= radialSegments; j++) {
       const uRad = (j / radialSegments) * Math.PI * 2;
       const cosR = Math.cos(uRad);
       const sinR = Math.sin(uRad);
 
-      let rMod = tubeRadius * flare;
-      if (sinR < -0.1) {
-        rMod = smin(rMod, rMod * 0.68, 0.035);
-      }
+      const rMod = tubeRadius * flare;
 
       const offset = new THREE.Vector3()
         .addScaledVector(normal, cosR * rMod)
@@ -742,12 +739,13 @@ export function createSpiralSnailShellGeometry(isNerite: boolean): THREE.BufferG
     }
   }
 
+  // Consistent outward-facing counter-clockwise winding order (avoids back-face culling cutting shell in half)
   for (let i = 0; i < steps; i++) {
     for (let j = 0; j < radialSegments; j++) {
       const aIdx = i * (radialSegments + 1) + j;
       const bIdx = aIdx + radialSegments + 1;
-      indices.push(aIdx, bIdx, aIdx + 1);
-      indices.push(bIdx, bIdx + 1, aIdx + 1);
+      indices.push(aIdx, aIdx + 1, bIdx);
+      indices.push(bIdx, aIdx + 1, bIdx + 1);
     }
   }
 
@@ -757,10 +755,17 @@ export function createSpiralSnailShellGeometry(isNerite: boolean): THREE.BufferG
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
 
-  geometry.rotateZ(Math.PI * 0.38);
-  geometry.rotateX(Math.PI * 0.2);
-  geometry.scale(1.2, 1.2, 1.2);
-  geometry.translate(0, 0.22, -0.06);
+  // Natural gastropod shell orientation and centering
+  geometry.rotateZ(isNerite ? Math.PI * 0.22 : Math.PI * 0.25);
+  geometry.rotateX(isNerite ? Math.PI * 0.12 : Math.PI * 0.15);
+
+  geometry.computeBoundingBox();
+  const box = geometry.boundingBox || new THREE.Box3();
+  const centerX = (box.min.x + box.max.x) * 0.5;
+  const centerZ = (box.min.z + box.max.z) * 0.5;
+
+  // Center horizontally and seat cleanly atop the snail foot hump (Y >= 0.08, no underground burial)
+  geometry.translate(-centerX, 0.08 - box.min.y, -centerZ - 0.05);
 
   return geometry;
 }

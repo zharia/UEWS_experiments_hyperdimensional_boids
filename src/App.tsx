@@ -13,6 +13,7 @@ import { FloraOverlay } from './components/FloraOverlay';
 import { BenchmarkPanel } from './components/BenchmarkPanel';
 import { BotanicalPanel } from './components/BotanicalPanel';
 import { EcosystemInspectorModal } from './components/EcosystemInspectorModal';
+import { LandscapeInspectorModal } from './components/LandscapeInspectorModal';
 import { OrganismDossierCard } from './components/OrganismDossierCard';
 import { ShortcutsHelpModal } from './components/ShortcutsHelpModal';
 import { EcologySimulation } from './simulation/EcologySimulation';
@@ -40,6 +41,7 @@ export default function App() {
   const [showBenchmark, setShowBenchmark] = useState<boolean>(false);
   const [showBotanical, setShowBotanical] = useState<boolean>(false);
   const [showEcology, setShowEcology] = useState<boolean>(false);
+  const [showLandscape, setShowLandscape] = useState<boolean>(false);
   const [showShortcuts, setShowShortcuts] = useState<boolean>(false);
 
   // Organism Focus & Zen Camera State
@@ -194,6 +196,9 @@ export default function App() {
   const handleScrubTime = (val: number) => {
     boidSim.currentTimeW = val;
     setCurrentTimeW(val);
+    if (sceneManager) {
+      sceneManager.landscapeSim.setTime4D(val);
+    }
   };
 
   const handleTogglePlay = (dir: number) => {
@@ -413,6 +418,15 @@ export default function App() {
         return;
       }
 
+      // G: 4D Landscape Evolution, Geometry & Topology HUD
+      if (key === 'g') {
+        setShowLandscape((prev) => {
+          showHotkeyFeedback('G', `4D Landscape Inspector: ${!prev ? 'OPEN' : 'CLOSED'}`);
+          return !prev;
+        });
+        return;
+      }
+
       // ? or /: Shortcuts Help
       if (key === '?' || key === '/' || code === 'Slash') {
         setShowShortcuts((prev) => !prev);
@@ -431,13 +445,15 @@ export default function App() {
           setShowBotanical(false);
         } else if (showEcology) {
           setShowEcology(false);
+        } else if (showLandscape) {
+          setShowLandscape(false);
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [timeDirection, sceneManager, isZenTour, inspectedOrganism, showShortcuts, showBenchmark, showBotanical, showEcology]);
+  }, [timeDirection, sceneManager, isZenTour, inspectedOrganism, showShortcuts, showBenchmark, showBotanical, showEcology, showLandscape]);
 
   return (
     <main
@@ -474,6 +490,7 @@ export default function App() {
         onOpenBenchmark={() => setShowBenchmark(true)}
         onOpenBotanical={() => setShowBotanical(true)}
         onOpenEcology={() => setShowEcology(true)}
+        onOpenLandscape={() => setShowLandscape(true)}
       />
 
       {/* Interactive Controls & Settings */}
@@ -537,6 +554,13 @@ export default function App() {
         isOpen={showEcology}
         onClose={() => setShowEcology(false)}
         ecologySim={ecologySim}
+      />
+
+      {/* Dynamic 4D Landscape Evolution, Geometry & Topology HUD */}
+      <LandscapeInspectorModal
+        isOpen={showLandscape}
+        onClose={() => setShowLandscape(false)}
+        landscapeSim={sceneManager?.landscapeSim}
       />
 
       {/* High-res camera shutter visual flash effect */}

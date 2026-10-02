@@ -46,6 +46,11 @@ const STAGE_LABELS: Record<BenchmarkStage, { label: string; color: string; desc:
     color: 'bg-lime-500',
     desc: '2D canvas filament rasterization & WebGL texture update',
   },
+  landscapeEvolution: {
+    label: '4D Landscape Evolution',
+    color: 'bg-amber-600',
+    desc: '4D field section projection, conformal flow & curvature redistribution',
+  },
   ambientObjects: {
     label: 'Ambient & Shader Uniforms',
     color: 'bg-indigo-500',

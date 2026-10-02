@@ -23,6 +23,9 @@ import { EcologySimulation } from '../simulation/EcologySimulation';
 import { EcologicalAgent } from '../agents/agent/EcologicalAgent';
 import { Vector3D } from '../space/physical/Vector3D';
 import { BoidMorphologyManager } from '../morphology/BoidMorphologyManager';
+import { LandscapeEvolutionSystem } from '../landscape/LandscapeEvolutionSystem';
+import { LandscapeProjection } from '../landscape/LandscapeProjection';
+import { LandscapeDiagnostics, LandscapeState } from '../landscape/types';
 
 interface CircadianKeyframe {
   phase: number;
@@ -361,6 +364,10 @@ export class AquariumSceneManager {
   public sedimentSystem!: SedimentPlumeSystem;
   private processedAcousticEventIds: Set<string> = new Set();
 
+  // Dynamic 4D Landscape Evolution System (Program Increment v0.0.2 - Task 007)
+  public landscapeSim: LandscapeEvolutionSystem;
+  public landscapeProjection: LandscapeProjection;
+
   constructor(
     container: HTMLElement,
     boidSim: BoidSimulation4D,
@@ -408,6 +415,14 @@ export class AquariumSceneManager {
     this.initDeskAndEnvironment();
     this.initAquariumGlass();
     this.coralObjects = createCoralReef(this.scene);
+
+    // Initialize Dynamic 4D Landscape Evolution System (Task 007)
+    this.landscapeSim = new LandscapeEvolutionSystem(1337);
+    this.landscapeProjection = new LandscapeProjection(this.landscapeSim);
+    if (this.coralObjects?.sandMesh) {
+      this.landscapeProjection.projectOntoMesh(this.coralObjects.sandMesh);
+    }
+
     this.initFishInstancing();
     this.initFireflyInstancing();
     this.initDynamicLighting();
@@ -1060,6 +1075,13 @@ export class AquariumSceneManager {
         this.floraTexture.needsUpdate = true;
       }
       benchmarkEngine.markStage('floraSim');
+
+      // 3b. Advance Dynamic 4D Landscape Evolution & Project onto Substrate Mesh (Task 007)
+      this.landscapeSim.advance(dt * this.boidSim.timeSpeed * this.boidSim.timeFlowDirection);
+      if (this.coralObjects?.sandMesh) {
+        this.landscapeProjection.projectOntoMesh(this.coralObjects.sandMesh);
+      }
+      benchmarkEngine.markStage('landscapeEvolution');
 
     // 4. Update Fish Instanced Attributes & Transforms
     const boids = this.boidSim.boids;
@@ -1891,6 +1913,20 @@ export class AquariumSceneManager {
       };
     }
     return bridgeEcologicalStateToBoids(this.ecologySim.agents, this.boidSim.boids);
+  }
+
+  /**
+   * Retrieves the authoritative 4D landscape simulation state (Task 007).
+   */
+  public getLandscapeState(): LandscapeState {
+    return this.landscapeSim.getState();
+  }
+
+  /**
+   * Retrieves live diagnostic metrics for the 4D landscape evolution system (Task 007).
+   */
+  public getLandscapeDiagnostics(): LandscapeDiagnostics {
+    return this.landscapeSim.getDiagnostics();
   }
 
   public getCameraPreset(): CameraPreset {

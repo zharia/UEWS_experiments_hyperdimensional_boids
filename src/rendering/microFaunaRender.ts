@@ -408,11 +408,13 @@ export class MicroFaunaRenderer {
         color: 0x3e3830,
         roughness: 0.28,
         metalness: 0.18,
+        side: THREE.DoubleSide,
       }),
       mysteryShell: new THREE.MeshStandardMaterial({
         color: 0xd99a22,
         roughness: 0.22,
         metalness: 0.12,
+        side: THREE.DoubleSide,
       }),
       snailFoot: new THREE.MeshStandardMaterial({
         color: 0xede6dc,
@@ -1270,10 +1272,15 @@ export class MicroFaunaRenderer {
     }
 
     // 3. Gravitational Shell Torque
-    if (node.shell && entity.attachedSurface === 'front_glass') {
-      // In front glass pane, gravity exerts a downward torque on the heavy shell whorls
-      node.shell.rotation.z = -entity.roll + Math.sin(cycle * 0.8) * 0.03;
-      node.shell.rotation.x = 0.16 + Math.cos(cycle * 0.8) * 0.02;
+    if (node.shell) {
+      if (entity.attachedSurface === 'front_glass') {
+        // In front glass pane, gravity exerts a downward torque on the heavy shell whorls
+        node.shell.rotation.z = -entity.roll + Math.sin(cycle * 0.8) * 0.03;
+        node.shell.rotation.x = 0.16 + Math.cos(cycle * 0.8) * 0.02;
+      } else {
+        node.shell.rotation.z = 0;
+        node.shell.rotation.x = 0;
+      }
     }
   }
 
