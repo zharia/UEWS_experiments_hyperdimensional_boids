@@ -401,9 +401,8 @@ export class AquariumSceneManager {
     const pixelRatio = Math.min(window.devicePixelRatio, 1.25);
     this.renderer.setPixelRatio(pixelRatio);
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
-    this.renderer.shadowMap.autoUpdate = false;
-    this.renderer.shadowMap.needsUpdate = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.autoUpdate = true;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.15;
     container.appendChild(this.renderer.domElement);
@@ -416,11 +415,22 @@ export class AquariumSceneManager {
     this.initAquariumGlass();
     this.coralObjects = createCoralReef(this.scene);
 
-    // Initialize Dynamic 4D Landscape Evolution System (Task 007)
+    // Initialize Dynamic 4D Landscape Evolution System (Task 007 & Task 007A)
     this.landscapeSim = new LandscapeEvolutionSystem(1337);
     this.landscapeProjection = new LandscapeProjection(this.landscapeSim);
-    if (this.coralObjects?.sandMesh) {
-      this.landscapeProjection.projectOntoMesh(this.coralObjects.sandMesh);
+    if (this.coralObjects) {
+      if (this.coralObjects.sandMesh) {
+        this.landscapeProjection.projectOntoMesh(this.coralObjects.sandMesh);
+      }
+      if (this.coralObjects.rockMap) {
+        this.landscapeProjection.projectRocks(this.coralObjects.rockMap);
+      }
+      if (this.coralObjects.reefMap) {
+        this.landscapeProjection.projectReefStructures(this.coralObjects.reefMap);
+      }
+      if (this.coralObjects.plantLifecycleSim?.plants) {
+        this.landscapeProjection.projectFloraAnchors(this.coralObjects.plantLifecycleSim.plants);
+      }
     }
 
     this.initFishInstancing();
@@ -769,18 +779,21 @@ export class AquariumSceneManager {
     this.ambientLight = new THREE.AmbientLight(0x184259, 1.4);
     this.scene.add(this.ambientLight);
 
-    // 2. Overhead Aquarium Canopy LED Light (Casts crisp shadows & caustics)
-    this.topAquariumLight = new THREE.DirectionalLight(0xbbf0ff, 2.2);
+    // 2. Overhead Aquarium Canopy LED Light (Casts soft, diffused aquatic shadows)
+    this.topAquariumLight = new THREE.DirectionalLight(0xbbf0ff, 2.0);
     this.topAquariumLight.position.set(2.0, 16.0, 2.0);
     this.topAquariumLight.castShadow = true;
-    this.topAquariumLight.shadow.mapSize.width = 512;
-    this.topAquariumLight.shadow.mapSize.height = 512;
+    this.topAquariumLight.shadow.mapSize.width = 2048;
+    this.topAquariumLight.shadow.mapSize.height = 2048;
     this.topAquariumLight.shadow.camera.near = 1;
     this.topAquariumLight.shadow.camera.far = 30;
     this.topAquariumLight.shadow.camera.left = -16;
     this.topAquariumLight.shadow.camera.right = 16;
     this.topAquariumLight.shadow.camera.top = 10;
     this.topAquariumLight.shadow.camera.bottom = -10;
+    this.topAquariumLight.shadow.bias = -0.0004;
+    this.topAquariumLight.shadow.normalBias = 0.04;
+    this.topAquariumLight.shadow.radius = 4.0;
     this.scene.add(this.topAquariumLight);
 
     // 3. Warm Desk Lamp Spotlight (Shines warm, soft diffuse light from outside the tank on the left)
@@ -1076,10 +1089,21 @@ export class AquariumSceneManager {
       }
       benchmarkEngine.markStage('floraSim');
 
-      // 3b. Advance Dynamic 4D Landscape Evolution & Project onto Substrate Mesh (Task 007)
+      // 3b. Advance Dynamic 4D Landscape Evolution & Project onto Substrate Mesh, Rocks, Reef & Flora Anchors (Task 007 & Task 007A)
       this.landscapeSim.advance(dt * this.boidSim.timeSpeed * this.boidSim.timeFlowDirection);
-      if (this.coralObjects?.sandMesh) {
-        this.landscapeProjection.projectOntoMesh(this.coralObjects.sandMesh);
+      if (this.coralObjects) {
+        if (this.coralObjects.sandMesh) {
+          this.landscapeProjection.projectOntoMesh(this.coralObjects.sandMesh);
+        }
+        if (this.coralObjects.rockMap) {
+          this.landscapeProjection.projectRocks(this.coralObjects.rockMap);
+        }
+        if (this.coralObjects.reefMap) {
+          this.landscapeProjection.projectReefStructures(this.coralObjects.reefMap);
+        }
+        if (this.coralObjects.plantLifecycleSim?.plants) {
+          this.landscapeProjection.projectFloraAnchors(this.coralObjects.plantLifecycleSim.plants);
+        }
       }
       benchmarkEngine.markStage('landscapeEvolution');
 

@@ -19,6 +19,8 @@ import { PlantLifecycleSimulation } from '../simulation/plantLifecycle';
 export interface CoralSceneObjects {
   coralGroup: THREE.Group;
   sandMesh: THREE.Mesh;
+  rockMap: Map<string, THREE.Mesh>;
+  reefMap: Map<string, THREE.Mesh>;
   anemoneMesh: THREE.InstancedMesh;
   anemoneBasePositions: THREE.Vector3[];
   bubbleSystem: THREE.Points;
@@ -125,22 +127,25 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
     );
   };
 
+  const rockMap = new Map<string, THREE.Mesh>();
   const rockPositions = [
-    { x: -9.5, y: -5.8, z: -2.0, scale: [1.8, 1.4, 1.6] },
-    { x: -7.0, y: -6.0, z: 1.5, scale: [1.4, 1.2, 1.3] },
-    { x: 7.5, y: -5.9, z: -1.5, scale: [2.0, 1.5, 1.7] },
-    { x: 9.8, y: -5.6, z: 1.2, scale: [1.6, 1.3, 1.4] },
-    { x: -0.5, y: -6.2, z: -2.8, scale: [2.2, 1.1, 1.5] },
+    { id: 'ROCK_001', x: -9.5, y: -5.8, z: -2.0, scale: [1.8, 1.4, 1.6] },
+    { id: 'ROCK_002', x: -7.0, y: -6.0, z: 1.5, scale: [1.4, 1.2, 1.3] },
+    { id: 'ROCK_003', x: 7.5, y: -5.9, z: -1.5, scale: [2.0, 1.5, 1.7] },
+    { id: 'ROCK_004', x: 9.8, y: -5.6, z: 1.2, scale: [1.6, 1.3, 1.4] },
+    { id: 'ROCK_005', x: -0.5, y: -6.2, z: -2.8, scale: [2.2, 1.1, 1.5] },
   ];
 
   rockPositions.forEach(r => {
     const rock = new THREE.Mesh(rockGeo, rockMat);
+    rock.name = r.id;
     rock.position.set(r.x, r.y, r.z);
     rock.scale.set(r.scale[0], r.scale[1], r.scale[2]);
-    rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+    rock.rotation.set(0, 0, 0);
     rock.castShadow = true;
     rock.receiveShadow = true;
     coralGroup.add(rock);
+    rockMap.set(r.id, rock);
   });
 
   // 3. Brain Coral (Diploria) with undulating convolutions
@@ -160,27 +165,36 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
   brainGeo.computeVertexNormals();
   brainGeo.computeBoundingSphere();
 
+  const reefMap = new Map<string, THREE.Mesh>();
   const brainMat1 = new THREE.MeshStandardMaterial({
     color: 0x4fb89a,
     roughness: 0.65,
     metalness: 0.08,
+    emissive: 0x0f2d24,
+    emissiveIntensity: 0.32,
   });
   const brainCoral1 = new THREE.Mesh(brainGeo, brainMat1);
+  brainCoral1.name = 'REEF_001';
   brainCoral1.position.set(-6.5, -4.6, 0.5);
   brainCoral1.scale.set(1.1, 0.9, 1.0);
   brainCoral1.receiveShadow = true;
   coralGroup.add(brainCoral1);
+  reefMap.set('REEF_001', brainCoral1);
 
   const brainMat2 = new THREE.MeshStandardMaterial({
     color: 0xd95a72,
     roughness: 0.62,
     metalness: 0.08,
+    emissive: 0x2b1318,
+    emissiveIntensity: 0.32,
   });
   const brainCoral2 = new THREE.Mesh(brainGeo, brainMat2);
+  brainCoral2.name = 'REEF_002';
   brainCoral2.position.set(6.2, -4.8, -1.0);
   brainCoral2.scale.set(0.9, 0.8, 0.85);
   brainCoral2.receiveShadow = true;
   coralGroup.add(brainCoral2);
+  reefMap.set('REEF_002', brainCoral2);
 
   // =========================================================================
   // 4. UPGRADED BOTANICAL FLORA (smin Collars, Splats & Biological Lifecycle)
@@ -684,6 +698,8 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
   return {
     coralGroup,
     sandMesh,
+    rockMap,
+    reefMap,
     anemoneMesh,
     anemoneBasePositions,
     bubbleSystem,

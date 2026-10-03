@@ -5,6 +5,81 @@
 
 export type FeatureClassification = 'flat' | 'ridge' | 'valley' | 'basin' | 'saddle' | 'peak';
 
+export type LandscapeFeatureCategory =
+  | 'terrain'
+  | 'rock'
+  | 'formation'
+  | 'reef_structure'
+  | 'flora_anchor';
+
+export type TopologyRelationType =
+  | 'supported_by'
+  | 'adjacent_to'
+  | 'attached_to'
+  | 'rooted_on';
+
+export interface TopologyRelation {
+  targetId: string;
+  relation: TopologyRelationType;
+}
+
+export interface Vector3D {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface Vector4D {
+  x: number;
+  y: number;
+  z: number;
+  w: number;
+}
+
+export interface LandscapeFeatureState {
+  id: string;
+  name: string;
+  category: LandscapeFeatureCategory;
+  position4D: Vector4D;
+  scale4D: Vector4D;
+  wRange: [number, number];
+  visible: boolean;
+  projectedPosition: Vector3D;
+  projectedScale: Vector3D;
+  projectedRotation: Vector3D;
+  curvature: number;
+  deformation: Vector3D;
+  topologyRelations: TopologyRelation[];
+  sliceProgress: number;
+  surfaceElevation: number;
+  embeddingDepth: number;
+}
+
+export interface SurfaceResolution {
+  elevation: number;
+  normal: Vector3D;
+  curvature: number;
+  flowDelta: Vector3D;
+  gradient: { dx: number; dz: number };
+}
+
+export interface GeometricValidationIssue {
+  featureId: string;
+  type:
+    | 'nan_or_infinite'
+    | 'degenerate_scale'
+    | 'out_of_bounds'
+    | 'unsupported_floating'
+    | 'terrain_penetration';
+  message: string;
+}
+
+export interface GeometricValidationReport {
+  isValid: boolean;
+  issues: GeometricValidationIssue[];
+  timestamp: number;
+}
+
 export interface LandscapeFeature {
   id: string; // e.g. 'RIDGE_001', 'BASIN_001'
   name: string;

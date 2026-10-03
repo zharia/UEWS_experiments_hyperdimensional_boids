@@ -451,7 +451,8 @@ export function createPlantSplatMesh(options: PlantSplatSystemOptions): {
   });
 
   const mesh = new THREE.Mesh(geometry, material);
-  mesh.castShadow = true;
+  // Leaf splats are thin semi-transparent billboards; disabling shadow casting avoids opaque rectangular block artifacts on the seabed.
+  mesh.castShadow = false;
   mesh.receiveShadow = true;
 
   return { mesh, material };

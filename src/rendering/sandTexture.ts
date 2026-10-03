@@ -185,8 +185,10 @@ export function createSandMesh(uniforms?: BenthicCausticUniforms): THREE.Mesh {
     map: sandTexture,
     bumpMap: sandBumpTexture,
     bumpScale: 0.08,
-    roughness: 0.88,
-    metalness: 0.04,
+    roughness: 0.84,
+    metalness: 0.02,
+    emissive: 0x142833, // Ambient oceanic backscatter baseline so shadowed sand remains softly illuminated and diffuse
+    emissiveIntensity: 0.42,
   });
 
   if (uniforms) {

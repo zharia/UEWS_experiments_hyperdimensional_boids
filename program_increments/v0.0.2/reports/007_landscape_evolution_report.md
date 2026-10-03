@@ -246,3 +246,11 @@ All criteria from Section 36 of `task_007.md` have been met:
 - [x] No uncontrolled randomness exists;
 - [x] No prohibited new major subsystem introduced;
 - [x] `007_landscape_evolution_report.md` created.
+
+---
+
+### Addendum: Task 007A Architectural Realignment Note
+
+As clarified in `program_increments/v0.0.2/task_007A.md` and detailed in `program_increments/v0.0.2/reports/007A_landscape_feature_integration_report.md`:
+- **Task 007 Scope:** Established the analytical 4D field, 4D traversal coordinate $w(t)$, evolving substrate heightfield, conformal/quasi-conformal mathematical formulations, and the semantic topology graph.
+- **Task 007A Extension:** Integrated geological rocks (`ROCK_001` - `ROCK_005`), reef structures (`STRUCTURE_001`, `REEF_001`, `REEF_002`), macro-formations, and ecological flora anchors into the same authoritative 4D world model $\mathcal{M}^4$, resolving static scenery disconnections and ensuring plants remain anchored to the evolving seabed. Detailed in `007A_landscape_feature_integration_report.md`.

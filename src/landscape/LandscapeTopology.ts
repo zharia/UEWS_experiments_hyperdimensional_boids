@@ -1,12 +1,30 @@
 /**
- * Task 007 — Dynamic 4D Landscape Evolution, Geometry & Topology
- * LandscapeTopology: Explicit topology graph, persistent feature identities, and invariance checks.
+ * Task 007 & Task 007A — Dynamic 4D Landscape Evolution, Geometry & Topology
+ * LandscapeTopology: Explicit topology manager, persistent feature identities,
+ * semantic topology graph, and geometric topology validation.
+ *
+ * CRITICAL ARCHITECTURAL DISTINCTIONS (Section 16):
+ * 1. Semantic Topology: The abstract relational graph of geological features, structural
+ *    anchor points, and biological holdfasts (e.g. 'ROCK_001 supported_by TERRAIN',
+ *    'ROCK_002 adjacent_to RIDGE_001'). Connects logical identities independently of meshes.
+ * 2. Geometric Topology: The spatial manifold properties of the projected shapes in R^3,
+ *    including non-penetration, surface attachment, bounded distortion, and lack of degenerate
+ *    or floating geometries.
+ * 3. Render Mesh Topology: The index and vertex buffer connectivity of the Three.js
+ *    geometry instances (e.g. 65x33 plane quad grid manifold on the GPU).
  */
 
-import { LandscapeFeature, LandscapeTopology as ILandscapeTopology } from './types';
+import {
+  GeometricValidationIssue,
+  GeometricValidationReport,
+  LandscapeFeature,
+  LandscapeFeatureState,
+  LandscapeTopology as ILandscapeTopology,
+} from './types';
 import { LandscapeGeometryEvaluator } from './LandscapeGeometry';
 
 export class LandscapeTopologyManager implements ILandscapeTopology {
+  // Semantic Topology
   public features: LandscapeFeature[] = [];
   public adjacency: Record<string, string[]> = {};
   public connectedComponents: number = 1;
@@ -14,12 +32,19 @@ export class LandscapeTopologyManager implements ILandscapeTopology {
   public lastTopologyCheck: number = 0;
   public mutationHistory: Array<{ timestamp: number; description: string }> = [];
 
+  // Geometric Validation Telemetry
+  public lastGeometricReport: GeometricValidationReport = {
+    isValid: true,
+    issues: [],
+    timestamp: 0,
+  };
+
   constructor() {
     this.initializeTopology();
   }
 
   /**
-   * Initializes the persistent topological feature graph of the aquarium substrate.
+   * Initializes the persistent semantic topological feature graph of the aquarium substrate.
    * Identities are conceptual and decoupled from mesh vertex indices.
    */
   private initializeTopology(): void {
@@ -102,7 +127,7 @@ export class LandscapeTopologyManager implements ILandscapeTopology {
   }
 
   /**
-   * Computes the number of connected components in the topology graph via BFS.
+   * Computes the number of connected components in the semantic topology graph via BFS.
    */
   private computeConnectedComponents(): void {
     const visited = new Set<string>();
@@ -111,7 +136,6 @@ export class LandscapeTopologyManager implements ILandscapeTopology {
     for (const f of this.features) {
       if (!visited.has(f.id)) {
         count++;
-        // BFS traverse
         const queue: string[] = [f.id];
         visited.add(f.id);
 
@@ -142,14 +166,12 @@ export class LandscapeTopologyManager implements ILandscapeTopology {
     for (let i = 0; i < this.features.length; i++) {
       const f = this.features[i];
 
-      // Sample geometry at feature centroid
       const m = geometry.evaluateMetrics(f.centroid.x, f.centroid.z);
       const h = sampleHeight ? sampleHeight(f.centroid.x, f.centroid.z) : m.height;
       f.centroid.y = h;
       f.meanHeight = h;
       f.meanCurvature = m.meanCurvature;
 
-      // Update bounds elevation
       f.bounds.minY = h - 0.35;
       f.bounds.maxY = h + 0.35;
     }
@@ -158,18 +180,16 @@ export class LandscapeTopologyManager implements ILandscapeTopology {
   }
 
   /**
-   * Verifies that the topology invariants (connectivity, component count, adjacency reciprocity)
+   * Verifies that semantic topology invariants (connectivity, component count, adjacency reciprocity)
    * are maintained under smooth geometric evolution.
    */
   public validateInvariants(): boolean {
-    // 1. Verify component count is strictly 1 (single continuous substrate manifold)
     this.computeConnectedComponents();
     if (this.connectedComponents !== 1) {
       this.isInvariant = false;
       return false;
     }
 
-    // 2. Verify symmetry / reciprocity of adjacency: if A in adj[B], B in adj[A]
     for (const [node, neighbors] of Object.entries(this.adjacency)) {
       for (const n of neighbors) {
         const reciprocal = this.adjacency[n];
@@ -180,7 +200,6 @@ export class LandscapeTopologyManager implements ILandscapeTopology {
       }
     }
 
-    // 3. Verify all features exist
     if (this.features.length !== 5) {
       this.isInvariant = false;
       return false;
@@ -192,9 +211,117 @@ export class LandscapeTopologyManager implements ILandscapeTopology {
   }
 
   /**
-   * Extension point for future controlled, event-driven topological mutations.
-   * In normal smooth evolution, topology remains strictly invariant.
+   * Validates Geometric Topology (Section 17):
+   * Audits projected 3D feature states for:
+   * - NaN / infinite coordinates
+   * - Degenerate scale (<= 0)
+   * - Out-of-bounds positioning beyond aquarium tank limits
+   * - Unsupported floating features
+   * - Excessive subsurface penetration
    */
+  public validateGeometricTopology(
+    featureStates: Map<string, LandscapeFeatureState>
+  ): GeometricValidationReport {
+    const issues: GeometricValidationIssue[] = [];
+
+    const tankBounds = {
+      minX: -16.0,
+      maxX: 16.0,
+      minZ: -10.0,
+      maxZ: 10.0,
+      minY: -8.0,
+      maxY: 8.0,
+    };
+
+    for (const [id, state] of featureStates.entries()) {
+      if (!state.visible) continue;
+
+      const pos = state.projectedPosition;
+      const sc = state.projectedScale;
+
+      // 1. NaN or Infinity checks
+      if (
+        !Number.isFinite(pos.x) ||
+        !Number.isFinite(pos.y) ||
+        !Number.isFinite(pos.z) ||
+        !Number.isFinite(sc.x) ||
+        !Number.isFinite(sc.y) ||
+        !Number.isFinite(sc.z)
+      ) {
+        issues.push({
+          featureId: id,
+          type: 'nan_or_infinite',
+          message: `Feature ${id} contains non-finite numeric coordinates or scales.`,
+        });
+        continue;
+      }
+
+      // 2. Degenerate scale
+      if (sc.x <= 0 || sc.y <= 0 || sc.z <= 0) {
+        issues.push({
+          featureId: id,
+          type: 'degenerate_scale',
+          message: `Feature ${id} has degenerate scale (<= 0): (${sc.x}, ${sc.y}, ${sc.z}).`,
+        });
+      }
+
+      // 3. Out-of-bounds positioning
+      if (
+        pos.x < tankBounds.minX ||
+        pos.x > tankBounds.maxX ||
+        pos.z < tankBounds.minZ ||
+        pos.z > tankBounds.maxZ ||
+        pos.y < tankBounds.minY ||
+        pos.y > tankBounds.maxY
+      ) {
+        issues.push({
+          featureId: id,
+          type: 'out_of_bounds',
+          message: `Feature ${id} is placed outside tank boundaries: (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)}).`,
+        });
+      }
+
+      // 4. Ground support consistency for supported/rooted features
+      const isSupported = state.topologyRelations.some(
+        (r) =>
+          r.targetId === 'TERRAIN' &&
+          (r.relation === 'supported_by' || r.relation === 'rooted_on')
+      );
+
+      if (isSupported) {
+        // Feature base elevation: pos.y - (sc.y * 0.5)
+        // Expected base surface elevation: state.surfaceElevation - state.embeddingDepth
+        // Tolerance: floating > 0.4 units above surface or buried > 1.2 units below surface
+        const featureBase = pos.y - sc.y * 0.5;
+        const groundSurface = state.surfaceElevation - state.embeddingDepth;
+        const elevationDiff = featureBase - groundSurface;
+
+        if (elevationDiff > 0.45) {
+          issues.push({
+            featureId: id,
+            type: 'unsupported_floating',
+            message: `Feature ${id} floats unsupported ${elevationDiff.toFixed(2)}m above terrain.`,
+          });
+        } else if (elevationDiff < -1.4) {
+          issues.push({
+            featureId: id,
+            type: 'terrain_penetration',
+            message: `Feature ${id} penetrates ${Math.abs(elevationDiff).toFixed(2)}m below substrate.`,
+          });
+        }
+      }
+    }
+
+    const report: GeometricValidationReport = {
+      isValid: issues.length === 0,
+      issues,
+      timestamp: performance.now(),
+    };
+
+    this.lastGeometricReport = report;
+    return report;
+  }
+
   public recordMutation(description: string): void {
     this.mutationHistory.push({
       timestamp: performance.now(),

@@ -20,7 +20,11 @@ import {
   Mountain,
 } from 'lucide-react';
 import { LandscapeEvolutionSystem } from '../landscape/LandscapeEvolutionSystem';
-import { LandscapeDiagnostics, LandscapeState } from '../landscape/types';
+import {
+  LandscapeDiagnostics,
+  LandscapeFeatureState,
+  LandscapeState,
+} from '../landscape/types';
 
 interface LandscapeInspectorModalProps {
   isOpen: boolean;
@@ -33,7 +37,7 @@ export const LandscapeInspectorModal: React.FC<LandscapeInspectorModalProps> = (
   onClose,
   landscapeSim,
 }) => {
-  const [activeTab, setActiveTab] = useState<'telemetry' | 'modes' | 'topology'>('telemetry');
+  const [activeTab, setActiveTab] = useState<'telemetry' | 'features' | 'modes' | 'topology'>('telemetry');
   const [diagnostics, setDiagnostics] = useState<LandscapeDiagnostics | null>(null);
   const [landscapeState, setLandscapeState] = useState<LandscapeState | null>(null);
   const [, setTick] = useState<number>(0);
@@ -169,6 +173,18 @@ export const LandscapeInspectorModal: React.FC<LandscapeInspectorModalProps> = (
           >
             <Activity className="w-3.5 h-3.5" />
             <span>Diagnostics Telemetry (Section 28)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('features')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+              activeTab === 'features'
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <Mountain className="w-3.5 h-3.5" />
+            <span>4D Features & Anchors ({landscapeSim.featureRegistry.count()})</span>
           </button>
 
           <button
@@ -417,6 +433,106 @@ export const LandscapeInspectorModal: React.FC<LandscapeInspectorModalProps> = (
                     Reset w to 0.0
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'features' && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-semibold text-white flex items-center gap-2">
+                    <Mountain className="w-4 h-4 text-amber-400" />
+                    <span>4D Landscape Feature System (M⁴ → Σ_w³)</span>
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Geological rocks, structural reef holdfasts, macro formations, and botanical flora anchors participate in the unified 4D world model.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="px-2.5 py-1 rounded-md bg-emerald-950/80 border border-emerald-700/60 text-emerald-300 flex items-center gap-1.5 font-mono">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    Geometric Topology: {landscapeSim.getGeometricValidation().isValid ? 'VALID' : 'ISSUES DETECTED'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Feature Cards Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                {(Array.from(landscapeSim.getFeatureStates().values()) as LandscapeFeatureState[]).map((f) => (
+                  <div
+                    key={f.id}
+                    className={`p-4 rounded-xl border transition space-y-2.5 ${
+                      f.visible
+                        ? 'bg-slate-950/70 border-slate-800'
+                        : 'bg-slate-950/30 border-slate-900 opacity-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-white font-mono">{f.id}</span>
+                        <span className="text-xs text-slate-300 truncate max-w-[140px]">{f.name}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                          {f.category}
+                        </span>
+                        <span
+                          className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded border ${
+                            f.visible
+                              ? 'bg-emerald-950 text-emerald-300 border-emerald-800/60'
+                              : 'bg-slate-900 text-slate-500 border-slate-800'
+                          }`}
+                        >
+                          {f.visible ? 'VISIBLE' : 'SUBMERGED'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Progress within w-domain */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                        <span>w-Domain: [{f.wRange[0]}, {f.wRange[1]}]</span>
+                        <span>Slice: {(f.sliceProgress * 100).toFixed(0)}%</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-amber-500 transition-all duration-150"
+                          style={{ width: `${Math.max(0, Math.min(100, f.sliceProgress * 100))}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs font-mono text-slate-400 pt-1">
+                      <div>
+                        Projected Pos:{' '}
+                        <span className="text-slate-200">
+                          [{f.projectedPosition.x.toFixed(1)}, {f.projectedPosition.y.toFixed(2)}, {f.projectedPosition.z.toFixed(1)}]
+                        </span>
+                      </div>
+                      <div>
+                        Projected Scale:{' '}
+                        <span className="text-slate-200">
+                          [{f.projectedScale.x.toFixed(2)}, {f.projectedScale.y.toFixed(2)}, {f.projectedScale.z.toFixed(2)}]
+                        </span>
+                      </div>
+                      <div>
+                        Surface Elev:{' '}
+                        <span className="text-slate-200">{f.surfaceElevation.toFixed(2)} m</span>
+                      </div>
+                      <div>
+                        Embed Depth:{' '}
+                        <span className="text-slate-200">{f.embeddingDepth.toFixed(2)} m</span>
+                      </div>
+                    </div>
+
+                    {f.topologyRelations.length > 0 && (
+                      <div className="text-[11px] text-amber-400/90 font-mono pt-0.5 border-t border-slate-900">
+                        Topology: {f.topologyRelations.map((r) => `${r.relation} ${r.targetId}`).join(', ')}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           )}

@@ -1,7 +1,8 @@
 /**
- * Task 007 — Dynamic 4D Landscape Evolution, Geometry & Topology
+ * Task 007 & Task 007A — Dynamic 4D Landscape Evolution, Geometry & Topology
  * LandscapeEvolutionSystem: Authoritative simulation subsystem driving 4D landscape evolution,
- * conformal transformations, quasi-conformal bounded distortion, and curvature flow.
+ * conformal transformations, quasi-conformal bounded distortion, curvature flow, and
+ * persistent 4D landscape feature integration (M^4 -> Sigma_w^3).
  */
 
 import {
@@ -10,13 +11,17 @@ import {
   DistortionField,
   DistortionSample,
   FeatureClassification,
+  GeometricValidationReport,
   LandscapeDiagnostics,
   LandscapeEvolutionState,
+  LandscapeFeatureState,
   LandscapeState,
+  SurfaceResolution,
 } from './types';
 import { Landscape4DField } from './Landscape4DField';
 import { LandscapeGeometryEvaluator } from './LandscapeGeometry';
 import { LandscapeTopologyManager } from './LandscapeTopology';
+import { LandscapeFeatureRegistry } from './LandscapeFeatureRegistry';
 
 export class LandscapeEvolutionSystem {
   public time4D: number = 0; // w coordinate
@@ -31,6 +36,7 @@ export class LandscapeEvolutionSystem {
   public readonly field4D: Landscape4DField;
   public readonly geometry: LandscapeGeometryEvaluator;
   public readonly topology: LandscapeTopologyManager;
+  public readonly featureRegistry: LandscapeFeatureRegistry;
 
   // Deformation modes
   private modes: DeformationMode[] = [];
@@ -43,10 +49,18 @@ export class LandscapeEvolutionSystem {
     this.field4D = new Landscape4DField(seed);
     this.geometry = new LandscapeGeometryEvaluator(this.field4D);
     this.topology = new LandscapeTopologyManager();
+    this.featureRegistry = new LandscapeFeatureRegistry(seed);
 
     this.initializeDeformationModes();
     this.geometry.setTime4D(this.time4D);
-    this.topology.updateFeatureGeometry(this.geometry);
+    this.topology.updateFeatureGeometry(this.geometry, (x, z) => this.sampleHeight(x, z));
+
+    // Initial evaluation of 4D features
+    const initialFeatureStates = this.featureRegistry.evaluateAll(
+      this.time4D,
+      (x, z) => this.resolveSurface(x, z)
+    );
+    this.topology.validateGeometricTopology(initialFeatureStates);
   }
 
   /**
@@ -128,8 +142,6 @@ export class LandscapeEvolutionSystem {
       evaluate: (x: number, z: number, w: number) => {
         const k = 0.12;
         const omega = 0.16;
-        // Bounded traveling conformal wave: wave phase along real propagation axis x
-        // strictly satisfies Cauchy-Riemann: u_x = v_z, u_z = -v_x for all w
         const u = Math.cos(k * x - omega * w) * Math.cosh(k * z);
         const v = -Math.sin(k * x - omega * w) * Math.sinh(k * z);
         return {
@@ -150,7 +162,6 @@ export class LandscapeEvolutionSystem {
       phase: 3.14,
       active: true,
       evaluate: (x: number, z: number, w: number) => {
-        // Enforce bounded distortion D <= D_max via tanh saturation
         const rawDistortion = Math.sin(0.35 * x + 0.25 * z - w * 0.07 * PHI + 3.14);
         const boundedD = this.maxAllowedDistortion * Math.tanh(rawDistortion / this.maxAllowedDistortion);
         return {
@@ -186,6 +197,7 @@ export class LandscapeEvolutionSystem {
   /**
    * Advances the landscape evolution by simulation timestep dt.
    * Deterministic, continuous, and independent of rendering frame rate.
+   * Advances w and synchronously evaluates both terrain and all registered 4D features.
    */
   public advance(dt: number): void {
     const clampedDt = Math.max(-1.0, Math.min(1.0, dt));
@@ -196,6 +208,15 @@ export class LandscapeEvolutionSystem {
 
     // Synchronize topology feature geometries
     this.topology.updateFeatureGeometry(this.geometry, (x, z) => this.sampleHeight(x, z));
+
+    // Synchronously evaluate all 4D landscape features against the newly updated surface
+    const featureStates = this.featureRegistry.evaluateAll(
+      this.time4D,
+      (x, z) => this.resolveSurface(x, z)
+    );
+
+    // Audit geometric topology of visible features
+    this.topology.validateGeometricTopology(featureStates);
   }
 
   /**
@@ -205,6 +226,12 @@ export class LandscapeEvolutionSystem {
     this.time4D = w;
     this.geometry.setTime4D(this.time4D);
     this.topology.updateFeatureGeometry(this.geometry, (x, z) => this.sampleHeight(x, z));
+
+    const featureStates = this.featureRegistry.evaluateAll(
+      this.time4D,
+      (x, z) => this.resolveSurface(x, z)
+    );
+    this.topology.validateGeometricTopology(featureStates);
   }
 
   /**
@@ -228,13 +255,16 @@ export class LandscapeEvolutionSystem {
   }
 
   /**
-   * Samples the authoritative combined landscape height at (x, z):
-   * H_total(x, z, w) = H_4D + V_conf.y + V_qc.y + V_curv.y + V_modal.y
+   * Resolves authoritative surface elevation, normal, curvature, gradient,
+   * and full 3D spatial flow displacement (dx, dy, dz) at coordinates (x, z).
+   * Satisfies Section 18: full spatial deformation (x, z) -> (x', z').
    */
-  public sampleHeight(x: number, z: number): number {
-    let h = this.field4D.evaluateHeight(x, z, this.time4D);
+  public resolveSurface(x: number, z: number): SurfaceResolution {
+    const baseH = this.field4D.evaluateHeight(x, z, this.time4D);
+    let totalDx = 0;
+    let totalDy = 0;
+    let totalDz = 0;
 
-    // Sum active deformation modes through the composable geometric flow field
     for (let i = 0; i < this.modes.length; i++) {
       const mode = this.modes[i];
       if (!mode.active) continue;
@@ -245,10 +275,52 @@ export class LandscapeEvolutionSystem {
       else if (mode.type === 'curvature_flow') modeWeight = this.curvatureStrength;
 
       const delta = mode.evaluate(x, z, this.time4D);
-      h += delta.dy * modeWeight;
+      totalDx += delta.dx * modeWeight;
+      totalDy += delta.dy * modeWeight;
+      totalDz += delta.dz * modeWeight;
     }
 
-    return h;
+    const elevation = baseH + totalDy;
+    const normal = this.geometry.sampleNormal(x, z);
+    const metrics = this.geometry.evaluateMetrics(x, z);
+    const gradient = this.geometry.sampleGradient(x, z);
+
+    return {
+      elevation,
+      normal,
+      curvature: metrics.meanCurvature,
+      flowDelta: { x: totalDx, y: totalDy, z: totalDz },
+      gradient,
+    };
+  }
+
+  /**
+   * Samples the authoritative combined landscape height at (x, z):
+   * H_total(x, z, w) = H_4D + V_conf.y + V_qc.y + V_curv.y + V_modal.y
+   */
+  public sampleHeight(x: number, z: number): number {
+    return this.resolveSurface(x, z).elevation;
+  }
+
+  /**
+   * Retrieves evaluated feature state for a specific feature ID.
+   */
+  public getFeatureState(featureId: string): LandscapeFeatureState | undefined {
+    return this.featureRegistry.getCachedState(featureId);
+  }
+
+  /**
+   * Retrieves all evaluated feature states.
+   */
+  public getFeatureStates(): Map<string, LandscapeFeatureState> {
+    return this.featureRegistry.getAllCachedStates();
+  }
+
+  /**
+   * Retrieves the latest geometric validation report.
+   */
+  public getGeometricValidation(): GeometricValidationReport {
+    return this.topology.lastGeometricReport;
   }
 
   /**
@@ -257,10 +329,8 @@ export class LandscapeEvolutionSystem {
    */
   public sampleDistortionAt(x: number, z: number): DistortionSample {
     const rawVal = Math.sin(0.35 * x + 0.25 * z - this.time4D * 0.07 * 1.618 + 3.14);
-    // Bounded Beltrami dilatation metric
     const D = Math.min(this.maxAllowedDistortion, Math.abs(this.maxAllowedDistortion * Math.tanh(rawVal)));
 
-    // Dilatation ratio K = (1 + D) / (1 - D)
     const K = (1.0 + D) / Math.max(0.0001, 1.0 - D);
     const sigmaMax = Math.sqrt(K);
     const sigmaMin = 1.0 / sigmaMax;
@@ -271,14 +341,12 @@ export class LandscapeEvolutionSystem {
 
   /**
    * Evaluates Cauchy-Riemann adherence for the conformal component.
-   * Computes |u_x - v_z| + |u_z + v_x|.
    */
   public evaluateConformalDeviation(x: number, z: number): number {
     const k = 0.12;
     const omega = 0.16;
     const eps = 0.001;
 
-    // Numerical finite differences of the conformal wave displacement
     const evalU = (px: number, pz: number) =>
       Math.cos(k * px - omega * this.time4D) * Math.cosh(k * pz);
     const evalV = (px: number, pz: number) =>
@@ -289,7 +357,6 @@ export class LandscapeEvolutionSystem {
     const v_x = (evalV(x + eps, z) - evalV(x - eps, z)) / (2 * eps);
     const v_z = (evalV(x, z + eps) - evalV(x, z - eps)) / (2 * eps);
 
-    // Cauchy-Riemann error
     return Math.abs(u_x - v_z) + Math.abs(u_z + v_x);
   }
 
@@ -346,10 +413,16 @@ export class LandscapeEvolutionSystem {
   /**
    * Generates live diagnostics telemetry.
    */
-  public getDiagnostics(): LandscapeDiagnostics {
+  public getDiagnostics(): LandscapeDiagnostics & {
+    registeredFeatureCount: number;
+    visibleFeatureCount: number;
+    geometricTopologyValid: boolean;
+  } {
     const centerDist = this.sampleDistortionAt(0, 0);
     const centerMetrics = this.geometry.evaluateMetrics(0, 0);
     const confDev = this.evaluateConformalDeviation(0, 0);
+    const cachedStates = this.featureRegistry.getAllCachedStates();
+    const visibleCount = Array.from(cachedStates.values()).filter((s) => s.visible).length;
 
     return {
       time4D: this.time4D,
@@ -363,6 +436,9 @@ export class LandscapeEvolutionSystem {
       topologyPreserved: this.topology.isInvariant,
       activeModeCount: this.modes.filter((m) => m.active).length,
       rootMeanSquareDisplacement: this.currentRMSDisplacement,
+      registeredFeatureCount: this.featureRegistry.count(),
+      visibleFeatureCount: visibleCount,
+      geometricTopologyValid: this.topology.lastGeometricReport.isValid,
     };
   }
 
