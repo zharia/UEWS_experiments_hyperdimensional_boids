@@ -18,6 +18,8 @@ import { Boid4D } from '../src/types';
 import {
   createSpiralSnailShellGeometry,
   createOrganicSnailFootGeometry,
+  createHighDetailCrabCarapaceGeometry,
+  createHighDetailClawGeometries,
 } from '../src/rendering/proceduralMorphology';
 import * as THREE from 'three';
 
@@ -406,6 +408,57 @@ describe('Task 005 — Morphological Expression & Individual Boid Identity', () 
       const bbox = foot.boundingBox!;
       expect(bbox.min.y).toBeGreaterThanOrEqual(0.0);
       expect(bbox.max.y).toBeGreaterThan(0.15);
+    });
+
+    it('crab carapace geometry has outward-facing dorsal and ventral normals', () => {
+      const carapace = createHighDetailCrabCarapaceGeometry();
+      const pos = carapace.getAttribute('position');
+      const norm = carapace.getAttribute('normal');
+
+      let topNormYSum = 0;
+      let topCount = 0;
+      let botNormYSum = 0;
+      let botCount = 0;
+
+      for (let i = 0; i < pos.count; i++) {
+        if (pos.getY(i) > 0.08) {
+          topNormYSum += norm.getY(i);
+          topCount++;
+        } else if (pos.getY(i) < -0.02) {
+          botNormYSum += norm.getY(i);
+          botCount++;
+        }
+      }
+
+      // Dorsal apex normals must point upward (+Y)
+      expect(topCount).toBeGreaterThan(500);
+      expect(topNormYSum / topCount).toBeGreaterThan(0.7);
+
+      // Ventral underbelly normals must point downward (-Y)
+      expect(botCount).toBeGreaterThan(500);
+      expect(botNormYSum / botCount).toBeLessThan(-0.7);
+    });
+
+    it('crab claw propodus and dactylus have outward-facing surface normals', () => {
+      const { propodus, dactylus } = createHighDetailClawGeometries();
+
+      for (const geo of [propodus, dactylus]) {
+        const p = geo.getAttribute('position');
+        const n = geo.getAttribute('normal');
+        let outwardDotSum = 0;
+        for (let i = 0; i < p.count; i++) {
+          const px = p.getX(i);
+          const py = p.getY(i);
+          const nx = n.getX(i);
+          const ny = n.getY(i);
+          const rad = Math.hypot(px, py);
+          if (rad > 0.001) {
+            outwardDotSum += (px * nx + py * ny) / rad;
+          }
+        }
+        const avgDot = outwardDotSum / p.count;
+        expect(avgDot).toBeGreaterThan(0.5);
+      }
     });
   });
 });

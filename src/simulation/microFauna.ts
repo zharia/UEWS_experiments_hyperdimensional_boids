@@ -61,7 +61,7 @@ export class MicroFaunaSimulation {
     for (let i = 0; i < this.config.crabs; i++) {
       const x = -10 + (i * 5.2) + (Math.random() - 0.5) * 2;
       const z = -3.5 + Math.random() * 7;
-      const y = getSandBedHeight(x, z) + 0.22;
+      const y = getSandBedHeight(x, z) + 0.20;
 
       this.entities.push({
         id: `crab_${i}_${Date.now()}`,
@@ -369,7 +369,33 @@ export class MicroFaunaSimulation {
     // Apply motion and conform strictly to seabed topography
     crab.x = Math.max(-12.5, Math.min(12.5, crab.x + crab.vx * dt));
     crab.z = Math.max(-4.8, Math.min(4.8, crab.z + crab.vz * dt));
-    crab.y = getSandBedHeight(crab.x, crab.z) + 0.22;
+
+    const sandH = getSandBedHeight(crab.x, crab.z);
+    // Measure local sand gradient across crab width (delta = 0.35)
+    const delta = 0.35;
+    const hR = getSandBedHeight(crab.x + delta, crab.z);
+    const hL = getSandBedHeight(crab.x - delta, crab.z);
+    const hF = getSandBedHeight(crab.x, crab.z + delta);
+    const hB = getSandBedHeight(crab.x, crab.z - delta);
+
+    const slopeX = (hR - hL) / (2 * delta);
+    const slopeZ = (hF - hB) / (2 * delta);
+
+    // Height offset: the articulated walking leg tips reach ~0.08 below the crab center origin.
+    // Setting crab.y to sandH + 0.20 gives proper ground clearance so leg tips rest on the substrate.
+    crab.y = sandH + 0.20;
+
+    // Align crab orientation to the substrate slope
+    const cosY = Math.cos(crab.rotationY);
+    const sinY = Math.sin(crab.rotationY);
+    const localSlopeZ = slopeX * sinY + slopeZ * cosY;
+    const localSlopeX = slopeX * cosY - slopeZ * sinY;
+
+    // Smoothly tilt crab pitch and roll to follow dunes without jitter
+    const targetPitch = -Math.atan(Math.max(-0.6, Math.min(0.6, localSlopeZ)));
+    const targetRoll = Math.atan(Math.max(-0.6, Math.min(0.6, localSlopeX)));
+    crab.pitch += (targetPitch - crab.pitch) * Math.min(1, dt * 8.0);
+    crab.roll += (targetRoll - crab.roll) * Math.min(1, dt * 8.0);
   }
 
   // ==================== SNAIL BEHAVIOR ====================

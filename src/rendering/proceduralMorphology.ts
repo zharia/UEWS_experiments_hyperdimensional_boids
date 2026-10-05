@@ -176,13 +176,13 @@ export function createHighDetailCrabCarapaceGeometry(): THREE.BufferGeometry {
     }
   }
 
-  // Dorsal face indices: center fan
+  // Dorsal face indices: center fan (facing UP +Y)
   for (let is = 0; is < angularSectors; is++) {
     const nextS = (is + 1) % angularSectors;
-    indices.push(dorsalCenterIdx, 1 + is, 1 + nextS);
+    indices.push(dorsalCenterIdx, 1 + nextS, 1 + is);
   }
 
-  // Dorsal face indices: concentric rings
+  // Dorsal face indices: concentric rings (facing UP +Y)
   for (let ir = 1; ir < radialRings; ir++) {
     const ringStart = 1 + (ir - 1) * angularSectors;
     const nextRingStart = 1 + ir * angularSectors;
@@ -194,8 +194,8 @@ export function createHighDetailCrabCarapaceGeometry(): THREE.BufferGeometry {
       const c = nextRingStart + is;
       const d = nextRingStart + nextS;
 
-      indices.push(a, c, b);
-      indices.push(b, c, d);
+      indices.push(a, b, c);
+      indices.push(b, d, c);
     }
   }
 
@@ -253,13 +253,13 @@ export function createHighDetailCrabCarapaceGeometry(): THREE.BufferGeometry {
     }
   }
 
-  // Ventral face indices: center fan (facing downward)
+  // Ventral face indices: center fan (facing DOWN -Y)
   for (let is = 0; is < angularSectors; is++) {
     const nextS = (is + 1) % angularSectors;
-    indices.push(ventralOffset, ventralOffset + 1 + nextS, ventralOffset + 1 + is);
+    indices.push(ventralOffset, ventralOffset + 1 + is, ventralOffset + 1 + nextS);
   }
 
-  // Ventral face indices: concentric rings (facing downward)
+  // Ventral face indices: concentric rings (facing DOWN -Y)
   for (let ir = 1; ir < radialRings; ir++) {
     const ringStart = ventralOffset + 1 + (ir - 1) * angularSectors;
     const nextRingStart = ventralOffset + 1 + ir * angularSectors;
@@ -271,8 +271,8 @@ export function createHighDetailCrabCarapaceGeometry(): THREE.BufferGeometry {
       const c = nextRingStart + is;
       const d = nextRingStart + nextS;
 
-      indices.push(a, b, c);
-      indices.push(b, d, c);
+      indices.push(a, c, b);
+      indices.push(b, c, d);
     }
   }
 
@@ -540,8 +540,8 @@ export function createHighDetailClawGeometries(): {
     for (let is = 0; is < segs; is++) {
       const a = ir * (segs + 1) + is;
       const b = a + segs + 1;
-      pIndices.push(a, b, a + 1);
-      pIndices.push(b, b + 1, a + 1);
+      pIndices.push(a, a + 1, b);
+      pIndices.push(b, a + 1, b + 1);
     }
   }
 
@@ -581,8 +581,8 @@ export function createHighDetailClawGeometries(): {
     for (let is = 0; is < segs; is++) {
       const a = ir * (segs + 1) + is;
       const b = a + segs + 1;
-      dIndices.push(a, b, a + 1);
-      dIndices.push(b, b + 1, a + 1);
+      dIndices.push(a, a + 1, b);
+      dIndices.push(b, a + 1, b + 1);
     }
   }
 

@@ -3,6 +3,9 @@
  * Type definitions for the 4D landscape subsystem.
  */
 
+import { FeatureDomain, FeatureKind } from './taxonomy';
+import { FeatureRelationship, MaterialDescriptor, MorphologyDescriptor } from './environmentalTypes';
+
 export type FeatureClassification = 'flat' | 'ridge' | 'valley' | 'basin' | 'saddle' | 'peak';
 
 export type LandscapeFeatureCategory =
@@ -41,6 +44,13 @@ export interface LandscapeFeatureState {
   id: string;
   name: string;
   category: LandscapeFeatureCategory;
+  domain?: FeatureDomain;
+  kind?: FeatureKind;
+  morphology?: MorphologyDescriptor;
+  material?: MaterialDescriptor;
+  relationships?: FeatureRelationship[];
+  parentId?: string;
+  environmentalSuitability?: number;
   position4D: Vector4D;
   scale4D: Vector4D;
   wRange: [number, number];

@@ -384,20 +384,24 @@ export class MicroFaunaRenderer {
         color: 0xa83c26, // Deep rich carcinus terracotta rust
         roughness: 0.36,
         metalness: 0.14,
+        side: THREE.DoubleSide,
       }),
       crabLeg: new THREE.MeshStandardMaterial({
         color: 0xc25e36,
         roughness: 0.42,
         metalness: 0.08,
+        side: THREE.DoubleSide,
       }),
       crabLegJoint: new THREE.MeshStandardMaterial({
         color: 0x8a321c,
         roughness: 0.5,
+        side: THREE.DoubleSide,
       }),
       crabClawTip: new THREE.MeshStandardMaterial({
         color: 0x2e120c,
         roughness: 0.25,
         metalness: 0.3,
+        side: THREE.DoubleSide,
       }),
       crabEye: new THREE.MeshStandardMaterial({
         color: 0x08080a,
@@ -600,31 +604,34 @@ export class MicroFaunaRenderer {
       const side = isLeft ? -1 : 1;
       const clawScale = 1.15;
 
-      // Arm segment (merus/carpus) connecting from body socket
+      // Arm segment (merus/carpus) connecting from body socket forward and outward
       const arm = new THREE.Mesh(this.geoCache.crabMerus, this.materials.crabLeg);
-      arm.rotation.z = side * 0.72;
-      arm.rotation.x = -0.32;
+      arm.rotation.set(-0.30, 0, -side * 0.56, 'YXZ');
       arm.scale.set(clawScale, clawScale, clawScale);
       clawGroup.add(arm);
 
+      // Distal end of arm segment where palm attaches seamlessly
+      const armLength = 0.32 * clawScale;
+      const armTip = new THREE.Vector3(0, armLength, 0).applyEuler(arm.rotation);
+
       // Palm (propodus) with fixed lower molariform pollex finger
       const palm = new THREE.Mesh(this.geoCache.crabClawPropodus, this.materials.shoreCrabCarapace);
-      palm.position.set(side * 0.20 * clawScale, 0.04, 0.22 * clawScale);
-      palm.rotation.y = side * 0.28;
+      palm.position.copy(armTip);
+      palm.rotation.set(0.12, side * 0.28, -side * 0.15, 'YXZ');
       palm.scale.set(clawScale, clawScale, clawScale);
       clawGroup.add(palm);
 
       // Movable upper dactylus finger hinged at dorsal pivot of the palm
       const dactylPivot = new THREE.Group();
-      dactylPivot.position.set(side * 0.20 * clawScale, 0.09 * clawScale, 0.32 * clawScale);
-      dactylPivot.rotation.y = side * 0.28;
+      dactylPivot.position.set(armTip.x, armTip.y + 0.05 * clawScale, armTip.z + 0.04 * clawScale);
+      dactylPivot.rotation.set(0.12, side * 0.28, -side * 0.15, 'YXZ');
 
       const dactyl = new THREE.Mesh(this.geoCache.crabClawDactylus, this.materials.crabLeg);
       dactyl.scale.set(clawScale, clawScale, clawScale);
       dactylPivot.add(dactyl);
       clawGroup.add(dactylPivot);
 
-      clawGroup.position.set(side * 0.26, 0.08, 0.14);
+      clawGroup.position.set(side * 0.26, 0.06, 0.16);
       root.add(clawGroup);
 
       return { clawGroup, dactyl: dactyl as unknown as THREE.Mesh };
@@ -652,35 +659,45 @@ export class MicroFaunaRenderer {
 
         // Basal Coxa segment inserted into sternal socket
         const coxaMesh = new THREE.Mesh(this.geoCache.crabCoxa, this.materials.crabLegJoint);
-        coxaMesh.rotation.z = side * (Math.PI * 0.22);
+        coxaMesh.rotation.z = -side * (Math.PI * 0.14);
         coxaGroup.add(coxaMesh);
+
+        // Merus group attached seamlessly at distal collar of coxa
+        const coxaTipX = side * 0.14 * Math.sin(Math.PI * 0.14);
+        const coxaTipY = 0.14 * Math.cos(Math.PI * 0.14);
+        const merusGroup = new THREE.Group();
+        merusGroup.position.set(coxaTipX, coxaTipY, 0);
 
         // Segment 1: Merus (muscular upper thigh)
         const merusMesh = new THREE.Mesh(this.geoCache.crabMerus, this.materials.crabLeg);
-        merusMesh.position.set(side * 0.06, 0.03, 0);
-        merusMesh.rotation.z = side * (Math.PI * 0.38);
-        coxaGroup.add(merusMesh);
+        merusMesh.rotation.z = -side * (Math.PI * 0.36);
+        merusGroup.add(merusMesh);
 
-        // Knee joint group at distal end of merus
+        // Knee joint group attached at distal condyle of merus
+        const merusTipX = side * 0.32 * Math.sin(Math.PI * 0.36);
+        const merusTipY = 0.32 * Math.cos(Math.PI * 0.36);
         const kneeGroup = new THREE.Group();
-        kneeGroup.position.set(side * 0.28, 0.14, 0);
+        kneeGroup.position.set(merusTipX, merusTipY, 0);
 
         // Segment 2: Carpus & Propodus (knee + shin)
         const carpusMesh = new THREE.Mesh(this.geoCache.crabCarpus, this.materials.crabLeg);
-        carpusMesh.rotation.z = side * (Math.PI * 0.68);
+        carpusMesh.rotation.z = -side * (Math.PI * 0.68);
         kneeGroup.add(carpusMesh);
 
-        // Ankle joint group at distal end of carpus/propodus
+        // Ankle joint group attached at distal end of carpus
+        const carpusTipX = side * 0.28 * Math.sin(Math.PI * 0.68);
+        const carpusTipY = 0.28 * Math.cos(Math.PI * 0.68);
         const ankleGroup = new THREE.Group();
-        ankleGroup.position.set(side * 0.18, -0.16, 0);
+        ankleGroup.position.set(carpusTipX, carpusTipY, 0);
 
         // Segment 3: Dactylus (curved walking claw tip)
         const dactylMesh = new THREE.Mesh(this.geoCache.crabDactylus, this.materials.crabClawTip);
-        dactylMesh.rotation.z = side * (Math.PI * 0.85);
+        dactylMesh.rotation.z = -side * (Math.PI * 0.85);
         ankleGroup.add(dactylMesh);
 
         kneeGroup.add(ankleGroup);
-        coxaGroup.add(kneeGroup);
+        merusGroup.add(kneeGroup);
+        coxaGroup.add(merusGroup);
         root.add(coxaGroup);
 
         crabLegs.push({ coxaGroup, kneeGroup, ankleGroup, side, pairIndex: p });
@@ -1115,7 +1132,7 @@ export class MicroFaunaRenderer {
 
       // Synchronize world transform
       node.group.position.set(entity.x, entity.y, entity.z);
-      node.group.rotation.set(entity.pitch, entity.rotationY, entity.roll);
+      node.group.rotation.set(entity.pitch, entity.rotationY, entity.roll, 'YXZ');
 
       switch (entity.category) {
         case 'crab':
@@ -1148,12 +1165,12 @@ export class MicroFaunaRenderer {
           const stepWave = Math.sin(cycle * 3.4 + phaseOffset);
           const liftWave = Math.cos(cycle * 3.4 + phaseOffset);
 
-          coxaGroup.rotation.y = (pairIndex - 1.5) * 0.28 + stepWave * 0.24;
-          kneeGroup.rotation.z = Math.max(0, liftWave) * 0.32 * side;
-          kneeGroup.rotation.x = stepWave * 0.12;
-          ankleGroup.rotation.z = -Math.max(0, liftWave) * 0.22 * side;
+          coxaGroup.rotation.y = (pairIndex - 1.5) * 0.32 + stepWave * 0.22;
+          kneeGroup.rotation.z = -Math.max(0, liftWave) * 0.28 * side;
+          kneeGroup.rotation.x = stepWave * 0.10;
+          ankleGroup.rotation.z = Math.max(0, liftWave) * 0.20 * side;
         } else {
-          coxaGroup.rotation.y = (pairIndex - 1.5) * 0.28;
+          coxaGroup.rotation.y = (pairIndex - 1.5) * 0.32;
           kneeGroup.rotation.z *= 0.88;
           kneeGroup.rotation.x *= 0.88;
           ankleGroup.rotation.z *= 0.88;

@@ -1,27 +1,52 @@
 /**
- * Task 007A — 4D Landscape Feature Integration
- * LandscapeFeatureRegistry: Deterministic feature registry managing persistent
- * 4D landscape feature identities, lookups, evaluations, and state projection.
+ * Task 007A / Task 001 (v0.0.3) — Feature Registry v2: Rich Procedural Environment Architecture
+ * LandscapeFeatureRegistry: Deterministic environment registry managing persistent
+ * 4D landscape features, spatial hierarchy (regions, zones, clusters), relationship graphs,
+ * procedural generator execution, and explicit-w state projection.
  */
 
+import { FeatureRelationshipGraph } from './FeatureRelationshipGraph';
 import {
-  FloraAnchor4DFeature,
-  GeologicalFormation4DFeature,
-  ILandscapeFeature,
-  ReefStructure4DFeature,
-  Rock4DFeature,
-} from './LandscapeFeature';
+  BiologyGenerator,
+  GeologyGenerator,
+  HabitatGenerator,
+  PhenomenonGenerator,
+  ReefGenerator,
+  RockFieldGenerator,
+} from './generators';
+import { ILandscapeFeature } from './LandscapeFeature';
+import { FeatureDomain, FeatureKind, FeatureRelationshipType } from './taxonomy';
+import {
+  FeatureEvaluationContext,
+  SpatialCluster,
+  SpatialRegion,
+  SpatialZone,
+} from './environmentalTypes';
 import { LandscapeFeatureState, SurfaceResolution } from './types';
+import { WorldCompiler } from './worldSpec/WorldCompiler';
+import { WorldSpecification } from './worldSpec/worldSpecTypes';
 
 export class LandscapeFeatureRegistry {
   private features: Map<string, ILandscapeFeature> = new Map();
   private cachedStates: Map<string, LandscapeFeatureState> = new Map();
+
+  // Feature Relationship Graph
+  public readonly relationshipGraph: FeatureRelationshipGraph = new FeatureRelationshipGraph();
+
+  // Spatial Hierarchy
+  private regions: Map<string, SpatialRegion> = new Map();
+  private zones: Map<string, SpatialZone> = new Map();
+  private clusters: Map<string, SpatialCluster> = new Map();
 
   constructor(seed?: number) {
     if (seed !== undefined) {
       this.initializeDefaultFeatures(seed);
     }
   }
+
+  // =========================================================================
+  // Feature Registration & Lookup
+  // =========================================================================
 
   /**
    * Registers a 4D landscape feature.
@@ -32,6 +57,13 @@ export class LandscapeFeatureRegistry {
       throw new Error('Landscape feature must possess a valid, non-empty id.');
     }
     this.features.set(feature.id, feature);
+
+    // Register embedded relationships if feature carries any
+    if (feature.relationships) {
+      for (const rel of feature.relationships) {
+        this.relationshipGraph.addRelationship(rel);
+      }
+    }
   }
 
   /**
@@ -53,6 +85,7 @@ export class LandscapeFeatureRegistry {
    */
   public remove(featureId: string): boolean {
     this.cachedStates.delete(featureId);
+    this.relationshipGraph.removeFeature(featureId);
     return this.features.delete(featureId);
   }
 
@@ -71,12 +104,100 @@ export class LandscapeFeatureRegistry {
   }
 
   /**
-   * Clears all registered features.
+   * Clears all registered features, cached states, hierarchy, and relationships.
    */
   public clear(): void {
     this.features.clear();
     this.cachedStates.clear();
+    this.relationshipGraph.clear();
+    this.regions.clear();
+    this.zones.clear();
+    this.clusters.clear();
   }
+
+  // =========================================================================
+  // Spatial Hierarchy Management (Section 12)
+  // =========================================================================
+
+  public registerRegion(region: SpatialRegion): void {
+    this.regions.set(region.id, { ...region });
+  }
+
+  public getRegion(regionId: string): SpatialRegion | undefined {
+    return this.regions.get(regionId);
+  }
+
+  public getRegions(): SpatialRegion[] {
+    return Array.from(this.regions.values());
+  }
+
+  public registerZone(zone: SpatialZone): void {
+    this.zones.set(zone.id, { ...zone });
+    const reg = this.regions.get(zone.parentId);
+    if (reg && !reg.zoneIds.includes(zone.id)) {
+      reg.zoneIds.push(zone.id);
+    }
+  }
+
+  public getZone(zoneId: string): SpatialZone | undefined {
+    return this.zones.get(zoneId);
+  }
+
+  public getZones(): SpatialZone[] {
+    return Array.from(this.zones.values());
+  }
+
+  public getZonesByRegion(regionId: string): SpatialZone[] {
+    return Array.from(this.zones.values()).filter(z => z.parentId === regionId);
+  }
+
+  public registerCluster(cluster: SpatialCluster): void {
+    this.clusters.set(cluster.id, { ...cluster });
+    const zone = this.zones.get(cluster.parentId);
+    if (zone && !zone.clusterIds.includes(cluster.id)) {
+      zone.clusterIds.push(cluster.id);
+    }
+  }
+
+  public getCluster(clusterId: string): SpatialCluster | undefined {
+    return this.clusters.get(clusterId);
+  }
+
+  public getClusters(): SpatialCluster[] {
+    return Array.from(this.clusters.values());
+  }
+
+  // =========================================================================
+  // Query Methods (Taxonomy & Hierarchy)
+  // =========================================================================
+
+  public getByDomain(domain: FeatureDomain): ILandscapeFeature[] {
+    return Array.from(this.features.values()).filter(f => f.domain === domain);
+  }
+
+  public getByKind(kind: FeatureKind): ILandscapeFeature[] {
+    return Array.from(this.features.values()).filter(f => f.kind === kind);
+  }
+
+  public getByZone(zoneId: string): ILandscapeFeature[] {
+    return Array.from(this.features.values()).filter(f => f.parentId === zoneId);
+  }
+
+  public getByRegion(regionId: string): ILandscapeFeature[] {
+    const zones = new Set(this.getZonesByRegion(regionId).map(z => z.id));
+    return Array.from(this.features.values()).filter(
+      f => f.parentId === regionId || (f.parentId && zones.has(f.parentId))
+    );
+  }
+
+  public getRelatedFeatures(featureId: string, type?: FeatureRelationshipType): ILandscapeFeature[] {
+    const relatedIds = this.relationshipGraph.getRelatedIds(featureId, type);
+    return relatedIds.map(id => this.get(id)).filter((f): f is ILandscapeFeature => f !== undefined);
+  }
+
+  // =========================================================================
+  // Evaluation & Projection
+  // =========================================================================
 
   /**
    * Evaluates all features at slice parameter w against the local landscape surface.
@@ -84,13 +205,14 @@ export class LandscapeFeatureRegistry {
    */
   public evaluateAll(
     w: number,
-    resolveSurface: (x: number, z: number, w?: number) => SurfaceResolution
+    resolveSurface: (x: number, z: number, w?: number) => SurfaceResolution,
+    context?: FeatureEvaluationContext
   ): Map<string, LandscapeFeatureState> {
     const states = new Map<string, LandscapeFeatureState>();
 
     for (const [id, feature] of this.features.entries()) {
       const surface = resolveSurface(feature.position4D.x, feature.position4D.z, w);
-      const state = feature.evaluate(w, surface);
+      const state = feature.evaluate(w, surface, context);
       states.set(id, state);
       this.cachedStates.set(id, state);
     }
@@ -112,256 +234,119 @@ export class LandscapeFeatureRegistry {
     return new Map(this.cachedStates);
   }
 
+  // =========================================================================
+  // Deterministic Procedural Generation
+  // =========================================================================
+
   /**
-   * Populates standard geological, structural, and flora anchor features
-   * deterministically from a given seed.
+   * Compiles and populates the registry from a structured WorldSpecification.
+   */
+  public generateFromSpecification(spec: WorldSpecification): void {
+    WorldCompiler.compile(spec, this);
+  }
+
+  /**
+   * Populates a complete, rich, deterministic procedural environment.
+   * Satisfies Section 30 requirements while strictly preserving all 007A/007B features.
    */
   public initializeDefaultFeatures(seed: number): void {
     this.clear();
 
-    // =========================================================================
-    // 1. GEOLOGICAL ROCKS (5 Migrated Rocks from coralGeometries.ts)
-    // =========================================================================
+    // 1. Establish Spatial Hierarchy (Regions & Zones)
+    this.registerRegion({
+      id: 'REGION_WEST',
+      name: 'Western Continental Shelf Region',
+      bounds: { minX: -14.0, maxX: -4.0, minZ: -6.0, maxZ: 6.0 },
+      depthRange: [-7.2, -5.8],
+      theme: 'Rocky shelf with dense kelp canopy and migratory sand dunes',
+      zoneIds: ['ZONE_WEST_SHELF'],
+    });
 
-    // ROCK_001: Western shelf boulder (active, continuous settling and deformation)
-    this.register(
-      new Rock4DFeature({
-        id: 'ROCK_001',
-        name: 'Western Shelf Boulder',
-        seed: seed + 101,
-        position4D: { x: -9.5, y: -5.8, z: -2.0, w: 30.0 },
-        scale4D: { x: 1.8, y: 1.4, z: 1.6, w: 1.0 },
-        wRange: [-20.0, 85.0],
-        baseEmbedding: 0.25,
-        topologyRelations: [
-          { targetId: 'TERRAIN', relation: 'supported_by' },
-          { targetId: 'RIDGE_001', relation: 'adjacent_to' },
-        ],
-      })
-    );
+    this.registerRegion({
+      id: 'REGION_CENTRAL',
+      name: 'Central Trench & Reef Nexus Region',
+      bounds: { minX: -4.0, maxX: 4.0, minZ: -6.0, maxZ: 6.0 },
+      depthRange: [-7.8, -6.0],
+      theme: 'Deep central depression, arch caverns, and coral holdfast mound',
+      zoneIds: ['ZONE_CENTRAL_REEF', 'ZONE_TRENCH_DEPTHS'],
+    });
 
-    // ROCK_002: Southwestern emerging outcrop
-    // Invisible at w < 10, emerges smoothly between w=10 and w=20, flourishes, subsides at w=65
-    this.register(
-      new Rock4DFeature({
-        id: 'ROCK_002',
-        name: 'Southwestern Emerging Outcrop',
-        seed: seed + 102,
-        position4D: { x: -7.0, y: -6.0, z: 1.5, w: 37.5 },
-        scale4D: { x: 1.4, y: 1.2, z: 1.3, w: 1.0 },
-        wRange: [10.0, 65.0],
-        baseEmbedding: 0.2,
-        topologyRelations: [
-          { targetId: 'TERRAIN', relation: 'supported_by' },
-          { targetId: 'BASIN_001', relation: 'adjacent_to' },
-        ],
-      })
-    );
+    this.registerRegion({
+      id: 'REGION_EAST',
+      name: 'Eastern Substrate Plateau Region',
+      bounds: { minX: 4.0, maxX: 14.0, minZ: -6.0, maxZ: 6.0 },
+      depthRange: [-6.8, -5.5],
+      theme: 'Sandy rise shelf with sponge gardens and deltaic fan',
+      zoneIds: ['ZONE_EAST_PLATEAU'],
+    });
 
-    // ROCK_003: Eastern monolith (sinking / disappearing rock)
-    // Prominent at low w, gradually submerges beneath shifting sediment, disappears past w=45
-    this.register(
-      new Rock4DFeature({
-        id: 'ROCK_003',
-        name: 'Eastern Submerging Monolith',
-        seed: seed + 103,
-        position4D: { x: 7.5, y: -5.9, z: -1.5, w: 0.0 },
-        scale4D: { x: 2.0, y: 1.5, z: 1.7, w: 1.0 },
-        wRange: [-50.0, 45.0],
-        baseEmbedding: 0.3,
-        topologyRelations: [
-          { targetId: 'TERRAIN', relation: 'supported_by' },
-          { targetId: 'VALLEY_001', relation: 'adjacent_to' },
-        ],
-      })
-    );
+    this.registerZone({
+      id: 'ZONE_WEST_SHELF',
+      name: 'Western Escarpment & Dune Shelf',
+      parentId: 'REGION_WEST',
+      bounds: { minX: -12.0, maxX: -5.0, minZ: -4.5, maxZ: 4.5 },
+      dominantSubstrate: 'exposed_rock',
+      clusterIds: [],
+    });
 
-    // ROCK_004: Far-eastern terrace rock (changing geometry & scale)
-    // Strong response to conformal wave modes & curvature flow
-    this.register(
-      new Rock4DFeature({
-        id: 'ROCK_004',
-        name: 'Eastern Terrace Deforming Rock',
-        seed: seed + 104,
-        position4D: { x: 9.8, y: -5.6, z: 1.2, w: 25.0 },
-        scale4D: { x: 1.6, y: 1.3, z: 1.4, w: 1.0 },
-        wRange: [-40.0, 90.0],
-        baseEmbedding: 0.22,
-        topologyRelations: [
-          { targetId: 'TERRAIN', relation: 'supported_by' },
-          { targetId: 'PLATEAU_001', relation: 'adjacent_to' },
-        ],
-      })
-    );
+    this.registerZone({
+      id: 'ZONE_CENTRAL_REEF',
+      name: 'Central Reef Mound Sanctuary',
+      parentId: 'REGION_CENTRAL',
+      bounds: { minX: -3.0, maxX: 3.0, minZ: -2.5, maxZ: 2.5 },
+      dominantSubstrate: 'coral_rubble',
+      clusterIds: [],
+    });
 
-    // ROCK_005: Central benthic holdfast rock (coherent terrain relationship)
-    // Sits in central basin/ridge nexus, adjusting elevation, pitch, and embedding with substrate
-    this.register(
-      new Rock4DFeature({
-        id: 'ROCK_005',
-        name: 'Central Benthic Nexus Rock',
-        seed: seed + 105,
-        position4D: { x: -0.5, y: -6.2, z: -2.8, w: 0.0 },
-        scale4D: { x: 2.2, y: 1.1, z: 1.5, w: 1.0 },
-        wRange: [-100.0, 100.0],
-        baseEmbedding: 0.32,
-        topologyRelations: [
-          { targetId: 'TERRAIN', relation: 'supported_by' },
-          { targetId: 'STRUCTURE_001', relation: 'adjacent_to' },
-        ],
-      })
-    );
+    this.registerZone({
+      id: 'ZONE_TRENCH_DEPTHS',
+      name: 'Deep Benthic Sediment Trench',
+      parentId: 'REGION_CENTRAL',
+      bounds: { minX: -2.0, maxX: 2.0, minZ: -5.5, maxZ: -1.0 },
+      dominantSubstrate: 'silt',
+      clusterIds: [],
+    });
 
-    // =========================================================================
-    // 2. REEF STRUCTURAL FORMATIONS
-    // =========================================================================
+    this.registerZone({
+      id: 'ZONE_EAST_PLATEAU',
+      name: 'Eastern Benthic Sand Shelf & Sponge Garden',
+      parentId: 'REGION_EAST',
+      bounds: { minX: 5.0, maxX: 12.0, minZ: -4.0, maxZ: 4.0 },
+      dominantSubstrate: 'sand',
+      clusterIds: [],
+    });
 
-    // STRUCTURE_001: Central reef holdfast mound
-    this.register(
-      new ReefStructure4DFeature({
-        id: 'STRUCTURE_001',
-        name: 'Central Reef Mound Holdfast',
-        position4D: { x: 0.0, y: -6.2, z: -1.0, w: 0.0 },
-        scale4D: { x: 2.5, y: 1.2, z: 2.0, w: 1.0 },
-        wRange: [-100.0, 100.0],
-        baseEmbedding: 0.35,
-        topologyRelations: [{ targetId: 'TERRAIN', relation: 'supported_by' }],
-      })
-    );
+    // 2. Execute Deterministic Generators in Causal Order
+    const genContext = { seed, w: 0 };
 
-    // REEF_001: Western brain coral substrate base
-    this.register(
-      new ReefStructure4DFeature({
-        id: 'REEF_001',
-        name: 'Western Brain Coral Substrate',
-        position4D: { x: -6.5, y: -4.6, z: 0.5, w: 0.0 },
-        scale4D: { x: 1.1, y: 0.9, z: 1.0, w: 1.0 },
-        wRange: [-80.0, 100.0],
-        baseEmbedding: 0.28,
-        topologyRelations: [
-          { targetId: 'TERRAIN', relation: 'supported_by' },
-          { targetId: 'RIDGE_001', relation: 'adjacent_to' },
-        ],
-      })
-    );
-
-    // REEF_002: Eastern brain coral substrate base
-    this.register(
-      new ReefStructure4DFeature({
-        id: 'REEF_002',
-        name: 'Eastern Brain Coral Substrate',
-        position4D: { x: 6.2, y: -4.8, z: -1.0, w: 0.0 },
-        scale4D: { x: 0.9, y: 0.8, z: 0.85, w: 1.0 },
-        wRange: [-80.0, 100.0],
-        baseEmbedding: 0.26,
-        topologyRelations: [
-          { targetId: 'TERRAIN', relation: 'supported_by' },
-          { targetId: 'PLATEAU_001', relation: 'adjacent_to' },
-        ],
-      })
-    );
-
-    // =========================================================================
-    // 3. FLORA ANCHORS (Botanical Organism Substrate Anchors)
-    // Keeps biological organisms rooted to the dynamic seabed
-    // =========================================================================
-
-    const plantOrigins = [
-      { id: 'FLORA_ANCHOR_acropora_amethyst', name: 'Amethyst Staghorn Holdfast', x: -9.2, y: -6.6, z: -1.8 },
-      { id: 'FLORA_ANCHOR_giant_kelp_emerald', name: 'Emerald Kelp Holdfast', x: -6.8, y: -6.7, z: -2.2 },
-      { id: 'FLORA_ANCHOR_cabomba_mint', name: 'Mint Cabomba Root Anchor', x: -3.2, y: -6.8, z: 2.0 },
-      { id: 'FLORA_ANCHOR_amazon_sword_crimson', name: 'Crimson Sword Root Mound', x: 2.8, y: -6.8, z: 1.8 },
-      { id: 'FLORA_ANCHOR_acropora_coral_pink', name: 'Pink Staghorn Holdfast', x: 7.2, y: -6.7, z: -1.6 },
-      { id: 'FLORA_ANCHOR_giant_kelp_golden', name: 'Golden Kelp Holdfast', x: 9.5, y: -6.6, z: -2.0 },
-    ];
-
-    for (const p of plantOrigins) {
-      this.register(
-        new FloraAnchor4DFeature({
-          id: p.id,
-          name: p.name,
-          position4D: { x: p.x, y: p.y, z: p.z, w: 0.0 },
-          initialSurfaceY: p.y,
-          baseEmbedding: 0.05,
-          topologyRelations: [{ targetId: 'TERRAIN', relation: 'rooted_on' }],
-        })
-      );
+    const geologyGen = new GeologyGenerator();
+    for (const f of geologyGen.generate(genContext)) {
+      this.register(f);
     }
 
-    // =========================================================================
-    // 4. GEOLOGICAL MACRO FORMATIONS (Authoritative Hyper-Ellipsoidal Formations in M^4)
-    // =========================================================================
+    const rockGen = new RockFieldGenerator();
+    for (const f of rockGen.generate(genContext)) {
+      this.register(f);
+    }
 
-    this.register(
-      new GeologicalFormation4DFeature({
-        id: 'FORMATION_WEST_SHELF',
-        name: 'West Shelf Migratory Dune',
-        position4D: { x: -6.5, y: -6.4, z: -1.5, w: 10.0 },
-        scale4D: { x: 5.5, y: 0.38, z: 3.8, w: 14.0 },
-        radiusX: 5.5,
-        peakHeight: 0.38,
-        radiusZ: 3.8,
-        radiusW: 14.0,
-        wRange: [-4.0, 24.0],
-        topologyRelations: [
-          { targetId: 'TERRAIN', relation: 'adjacent_to' },
-          { targetId: 'ROCK_001', relation: 'supports' },
-        ],
-      })
-    );
+    const reefGen = new ReefGenerator();
+    for (const f of reefGen.generate(genContext)) {
+      this.register(f);
+    }
 
-    this.register(
-      new GeologicalFormation4DFeature({
-        id: 'FORMATION_EAST_BANK',
-        name: 'East Sand Bank Swell',
-        position4D: { x: 6.8, y: -6.35, z: 0.8, w: 35.0 },
-        scale4D: { x: 6.0, y: 0.42, z: 4.2, w: 16.0 },
-        radiusX: 6.0,
-        peakHeight: 0.42,
-        radiusZ: 4.2,
-        radiusW: 16.0,
-        wRange: [19.0, 51.0],
-        topologyRelations: [
-          { targetId: 'TERRAIN', relation: 'adjacent_to' },
-          { targetId: 'PLATEAU_001', relation: 'adjacent_to' },
-        ],
-      })
-    );
+    const biologyGen = new BiologyGenerator();
+    for (const f of biologyGen.generate(genContext)) {
+      this.register(f);
+    }
 
-    this.register(
-      new GeologicalFormation4DFeature({
-        id: 'FORMATION_CENTRAL_TRENCH',
-        name: 'Central Trench Depression',
-        position4D: { x: 0.5, y: -6.85, z: -2.2, w: 60.0 },
-        scale4D: { x: 4.8, y: -0.35, z: 3.2, w: 18.0 },
-        radiusX: 4.8,
-        peakHeight: -0.35,
-        radiusZ: 3.2,
-        radiusW: 18.0,
-        wRange: [42.0, 78.0],
-        topologyRelations: [
-          { targetId: 'TERRAIN', relation: 'adjacent_to' },
-          { targetId: 'FORMATION_SEABED_PLATEAU', relation: 'adjacent_to' },
-        ],
-      })
-    );
+    const habitatGen = new HabitatGenerator();
+    for (const f of habitatGen.generate(genContext)) {
+      this.register(f);
+    }
 
-    this.register(
-      new GeologicalFormation4DFeature({
-        id: 'FORMATION_SEABED_PLATEAU',
-        name: 'Seabed Elevated Plateau',
-        position4D: { x: -2.0, y: -6.35, z: 2.4, w: 85.0 },
-        scale4D: { x: 5.2, y: 0.36, z: 3.6, w: 15.0 },
-        radiusX: 5.2,
-        peakHeight: 0.36,
-        radiusZ: 3.6,
-        radiusW: 15.0,
-        wRange: [70.0, 100.0],
-        topologyRelations: [
-          { targetId: 'TERRAIN', relation: 'adjacent_to' },
-          { targetId: 'FORMATION_CENTRAL_TRENCH', relation: 'adjacent_to' },
-        ],
-      })
-    );
+    const phenomenonGen = new PhenomenonGenerator();
+    for (const f of phenomenonGen.generate(genContext)) {
+      this.register(f);
+    }
   }
 }
