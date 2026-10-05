@@ -142,8 +142,8 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
     rock.position.set(r.x, r.y, r.z);
     rock.scale.set(r.scale[0], r.scale[1], r.scale[2]);
     rock.rotation.set(0, 0, 0);
-    rock.castShadow = true;
-    rock.receiveShadow = true;
+    rock.castShadow = false;
+    rock.receiveShadow = false;
     coralGroup.add(rock);
     rockMap.set(r.id, rock);
   });
@@ -177,7 +177,7 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
   brainCoral1.name = 'REEF_001';
   brainCoral1.position.set(-6.5, -4.6, 0.5);
   brainCoral1.scale.set(1.1, 0.9, 1.0);
-  brainCoral1.receiveShadow = true;
+  brainCoral1.receiveShadow = false;
   coralGroup.add(brainCoral1);
   reefMap.set('REEF_001', brainCoral1);
 
@@ -192,9 +192,38 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
   brainCoral2.name = 'REEF_002';
   brainCoral2.position.set(6.2, -4.8, -1.0);
   brainCoral2.scale.set(0.9, 0.8, 0.85);
-  brainCoral2.receiveShadow = true;
+  brainCoral2.receiveShadow = false;
   coralGroup.add(brainCoral2);
   reefMap.set('REEF_002', brainCoral2);
+
+  // 3b. Central Reef Structural Mound (STRUCTURE_001) — GAP-002 Resolution
+  const moundGeo = new THREE.CylinderGeometry(1.6, 2.4, 1.2, 24, 4);
+  const mPos = moundGeo.attributes.position;
+  for (let i = 0; i < mPos.count; i++) {
+    const vx = mPos.getX(i);
+    const vy = mPos.getY(i);
+    const vz = mPos.getZ(i);
+    const phi = Math.atan2(vz, vx);
+    const r = Math.sqrt(vx * vx + vz * vz);
+    const noise = Math.sin(phi * 5.0 + vy * 3.0) * 0.16 + Math.cos(r * 3.5 - vy * 2.0) * 0.1;
+    mPos.setXYZ(i, vx + (vx / Math.max(0.1, r)) * noise, vy, vz + (vz / Math.max(0.1, r)) * noise);
+  }
+  moundGeo.computeVertexNormals();
+
+  const moundMat = new THREE.MeshStandardMaterial({
+    color: 0x827088, // Calcified reef carbonate / coralline algae rose-grey
+    roughness: 0.72,
+    metalness: 0.06,
+    emissive: 0x1f1422,
+    emissiveIntensity: 0.35,
+  });
+  const centralReefStructure = new THREE.Mesh(moundGeo, moundMat);
+  centralReefStructure.name = 'STRUCTURE_001';
+  centralReefStructure.position.set(0.0, -6.2, -1.0);
+  centralReefStructure.scale.set(2.5, 1.2, 2.0);
+  centralReefStructure.receiveShadow = false;
+  coralGroup.add(centralReefStructure);
+  reefMap.set('STRUCTURE_001', centralReefStructure);
 
   // =========================================================================
   // 4. UPGRADED BOTANICAL FLORA (smin Collars, Splats & Biological Lifecycle)
@@ -216,8 +245,8 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
   const treePos1 = new THREE.Vector3(-9.2, -6.6, -1.8);
   const treeData1 = createAcroporaTreeGeometry(treePos1, 3.4, 0.42, 4);
   const treeMesh1 = new THREE.Mesh(treeData1.stemGeometry, treeMat1);
-  treeMesh1.castShadow = true;
-  treeMesh1.receiveShadow = true;
+  treeMesh1.castShadow = false;
+  treeMesh1.receiveShadow = false;
 
   // Polyp splats for Tree 1
   const treeSplats1 = createPlantSplatMesh({
@@ -280,8 +309,8 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
   const treePos2 = new THREE.Vector3(8.5, -6.6, -1.0);
   const treeData2 = createAcroporaTreeGeometry(treePos2, 3.6, 0.44, 4);
   const treeMesh2 = new THREE.Mesh(treeData2.stemGeometry, treeMat2);
-  treeMesh2.castShadow = true;
-  treeMesh2.receiveShadow = true;
+  treeMesh2.castShadow = false;
+  treeMesh2.receiveShadow = false;
 
   const treeSplats2 = createPlantSplatMesh({
     splats: treeData2.splats,
@@ -343,7 +372,7 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
   const kelpPos1 = new THREE.Vector3(-2.8, -6.8, -3.2);
   const kelpData1 = createGiantKelpGeometry(kelpPos1, 8, 7.8);
   const kelpMesh1 = new THREE.Mesh(kelpData1.stemGeometry, kelpMat1);
-  kelpMesh1.receiveShadow = true;
+  kelpMesh1.receiveShadow = false;
 
   const kelpSplats1 = createPlantSplatMesh({
     splats: kelpData1.splats,
@@ -405,7 +434,7 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
   const kelpPos2 = new THREE.Vector3(3.4, -6.8, -2.6);
   const kelpData2 = createGiantKelpGeometry(kelpPos2, 6, 7.2);
   const kelpMesh2 = new THREE.Mesh(kelpData2.stemGeometry, kelpMat2);
-  kelpMesh2.receiveShadow = true;
+  kelpMesh2.receiveShadow = false;
 
   const kelpSplats2 = createPlantSplatMesh({
     splats: kelpData2.splats,
@@ -467,7 +496,7 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
   const milfoilPos = new THREE.Vector3(0.5, -6.8, -1.6);
   const milfoilData = createCabombaMilfoilGeometry(milfoilPos, 6.5, 9);
   const milfoilMesh = new THREE.Mesh(milfoilData.stemGeometry, milfoilMat);
-  milfoilMesh.receiveShadow = true;
+  milfoilMesh.receiveShadow = false;
 
   const milfoilSplats = createPlantSplatMesh({
     splats: milfoilData.splats,
@@ -529,7 +558,7 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
   const swordPos = new THREE.Vector3(-5.2, -6.4, 0.4);
   const swordData = createAmazonSwordGeometry(swordPos, 16, 5.2);
   const swordMesh = new THREE.Mesh(swordData.stemGeometry, swordMat);
-  swordMesh.receiveShadow = true;
+  swordMesh.receiveShadow = false;
 
   const swordSplats = createPlantSplatMesh({
     splats: swordData.splats,
@@ -599,7 +628,7 @@ export function createCoralReef(scene: THREE.Scene): CoralSceneObjects {
     sponge.position.set(sp.x, sp.y + sp.h * 0.5, sp.z);
     sponge.rotation.z = (Math.random() - 0.5) * 0.2;
     sponge.rotation.x = (Math.random() - 0.5) * 0.2;
-    sponge.receiveShadow = true;
+    sponge.receiveShadow = false;
     coralGroup.add(sponge);
   });
 

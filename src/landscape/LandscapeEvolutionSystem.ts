@@ -17,11 +17,13 @@ import {
   LandscapeFeatureState,
   LandscapeState,
   SurfaceResolution,
+  Vector3D,
 } from './types';
 import { Landscape4DField } from './Landscape4DField';
 import { LandscapeGeometryEvaluator } from './LandscapeGeometry';
 import { LandscapeTopologyManager } from './LandscapeTopology';
 import { LandscapeFeatureRegistry } from './LandscapeFeatureRegistry';
+import { ILandscapeFeature } from './LandscapeFeature';
 
 export class LandscapeEvolutionSystem {
   public time4D: number = 0; // w coordinate
@@ -292,6 +294,99 @@ export class LandscapeEvolutionSystem {
       flowDelta: { x: totalDx, y: totalDy, z: totalDz },
       gradient,
     };
+  }
+
+  /**
+   * Unified Spatial Transformation Phi_w(x, z):
+   * Maps logical coordinates (x, z) at time w to authoritative 3D projected surface point.
+   * Coordinate-System Invariant (Sections 7, 9 & 10): Both terrain and features derive from this exact function.
+   */
+  public projectSurface(
+    x: number,
+    z: number,
+    w?: number
+  ): {
+    projectedPosition: Vector3D;
+    normal: Vector3D;
+    elevation: number;
+    curvature: number;
+    flowDelta: Vector3D;
+  } {
+    const targetW = w !== undefined ? w : this.time4D;
+
+    if (w !== undefined && w !== this.time4D) {
+      const baseH = this.field4D.evaluateHeight(x, z, targetW);
+      let totalDx = 0;
+      let totalDy = 0;
+      let totalDz = 0;
+
+      for (let i = 0; i < this.modes.length; i++) {
+        const mode = this.modes[i];
+        if (!mode.active) continue;
+        let modeWeight = 1.0;
+        if (mode.type === 'conformal_wave') modeWeight = this.conformalStrength;
+        else if (mode.type === 'quasi_conformal_pulse') modeWeight = this.quasiConformalStrength;
+        else if (mode.type === 'curvature_flow') modeWeight = this.curvatureStrength;
+        const delta = mode.evaluate(x, z, targetW);
+        totalDx += delta.dx * modeWeight;
+        totalDy += delta.dy * modeWeight;
+        totalDz += delta.dz * modeWeight;
+      }
+
+      const elevation = baseH + totalDy;
+      const normal = this.geometry.sampleNormal(x, z);
+      const metrics = this.geometry.evaluateMetrics(x, z);
+
+      return {
+        projectedPosition: {
+          x: x + totalDx,
+          y: elevation,
+          z: z + totalDz,
+        },
+        normal,
+        elevation,
+        curvature: metrics.meanCurvature,
+        flowDelta: { x: totalDx, y: totalDy, z: totalDz },
+      };
+    }
+
+    const surf = this.resolveSurface(x, z);
+    return {
+      projectedPosition: {
+        x: x + surf.flowDelta.x,
+        y: surf.elevation,
+        z: z + surf.flowDelta.z,
+      },
+      normal: surf.normal,
+      elevation: surf.elevation,
+      curvature: surf.curvature,
+      flowDelta: surf.flowDelta,
+    };
+  }
+
+  /**
+   * Projects a feature at time w using the unified landscape transformation.
+   */
+  public projectFeature(
+    featureOrId: string | ILandscapeFeature,
+    w?: number
+  ): LandscapeFeatureState | undefined {
+    const feature =
+      typeof featureOrId === 'string'
+        ? this.featureRegistry.get(featureOrId)
+        : featureOrId;
+    if (!feature) return undefined;
+
+    const targetW = w !== undefined ? w : this.time4D;
+    const surf = this.resolveSurface(feature.position4D.x, feature.position4D.z);
+    return feature.evaluate(targetW, surf);
+  }
+
+  /**
+   * Evaluates the isolated height contribution of a geological formation.
+   */
+  public getFormationContribution(formationId: string, x: number, z: number): number {
+    return this.field4D.evaluateFormationContribution(formationId, x, z, this.time4D);
   }
 
   /**

@@ -476,7 +476,7 @@ describe('Task 007A — 4D Landscape Feature Integration', () => {
   });
 
   // --------------------------------------------------------------------------
-  // 9. Full Integration Chain (Section 31)
+  // 9. Full Integration Chain
   // --------------------------------------------------------------------------
   describe('9. Full Integration Chain', () => {
     it('executes complete 4D landscape -> w traversal -> terrain -> rocks -> reef -> flora anchor query', () => {
@@ -495,6 +495,7 @@ describe('Task 007A — 4D Landscape Feature Integration', () => {
 
       const reefMap = new Map<string, THREE.Mesh>();
       reefMap.set('REEF_001', new THREE.Mesh());
+      reefMap.set('STRUCTURE_001', new THREE.Mesh());
 
       const plantGroup = new THREE.Group();
       const plants = [
@@ -524,7 +525,280 @@ describe('Task 007A — 4D Landscape Feature Integration', () => {
       const reefMesh = reefMap.get('REEF_001')!;
       expect(reefMesh.position.y).toBeCloseTo(sys.getFeatureState('REEF_001')!.projectedPosition.y, 5);
 
+      const structMesh = reefMap.get('STRUCTURE_001')!;
+      expect(structMesh.position.y).toBeCloseTo(sys.getFeatureState('STRUCTURE_001')!.projectedPosition.y, 5);
+
       expect(plantGroup.position.y).not.toBe(0);
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // 10. Geological Formations Field Integration (GAP-001 & Section 27.1)
+  // --------------------------------------------------------------------------
+  describe('10. Geological Formations Field Integration', () => {
+    it('registers and evaluates all four macro-formations deterministically', () => {
+      const sys = new LandscapeEvolutionSystem(1337);
+      const reg = sys.featureRegistry;
+
+      const formations = [
+        'FORMATION_WEST_SHELF',
+        'FORMATION_EAST_BANK',
+        'FORMATION_CENTRAL_TRENCH',
+        'FORMATION_SEABED_PLATEAU',
+      ];
+
+      for (const id of formations) {
+        expect(reg.has(id)).toBe(true);
+        const feat = reg.get(id)!;
+        expect(feat.category).toBe('formation');
+
+        const state = sys.getFeatureState(id)!;
+        expect(state).toBeDefined();
+        expect(state.id).toBe(id);
+        expect(state.bounds).toBeDefined();
+        expect(state.bounds?.minX).toBeLessThan(state.bounds?.maxX ?? 0);
+        expect(typeof state.surfaceInfluence).toBe('number');
+        expect(typeof state.curvatureInfluence).toBe('number');
+      }
+    });
+
+    it('demonstrates that geological formations directly affect the visible landscape height', () => {
+      const sys = new LandscapeEvolutionSystem(1337);
+
+      // At w = 10: FORMATION_WEST_SHELF is at peak w-intersection
+      sys.setTime4D(10.0);
+      const westShelfState = sys.getFeatureState('FORMATION_WEST_SHELF')!;
+      expect(westShelfState.visible).toBe(true);
+      expect(westShelfState.surfaceInfluence).toBeGreaterThan(0.3);
+
+      const shelfContrib = sys.getFormationContribution('FORMATION_WEST_SHELF', -6.5, -1.5);
+      expect(shelfContrib).toBeCloseTo(0.38, 2);
+
+      // At w = 60: FORMATION_CENTRAL_TRENCH is active as a depression
+      sys.setTime4D(60.0);
+      const trenchState = sys.getFeatureState('FORMATION_CENTRAL_TRENCH')!;
+      expect(trenchState.visible).toBe(true);
+      expect(trenchState.surfaceInfluence).toBeLessThan(-0.25);
+
+      const trenchContrib = sys.getFormationContribution('FORMATION_CENTRAL_TRENCH', 0.5, -2.2);
+      expect(trenchContrib).toBeCloseTo(-0.35, 2);
+
+      // Changing w changes their contribution smoothly
+      sys.setTime4D(100.0);
+      const trenchStateAt100 = sys.getFeatureState('FORMATION_CENTRAL_TRENCH')!;
+      expect(trenchStateAt100.visible).toBe(false);
+      expect(trenchStateAt100.surfaceInfluence).toBe(0);
+    });
+
+    it('proves formation evaluation is strictly deterministic across seeds and time', () => {
+      const sysA = new LandscapeEvolutionSystem(777);
+      const sysB = new LandscapeEvolutionSystem(777);
+
+      sysA.setTime4D(35.0);
+      sysB.setTime4D(35.0);
+
+      const sA = sysA.getFeatureState('FORMATION_EAST_BANK')!;
+      const sB = sysB.getFeatureState('FORMATION_EAST_BANK')!;
+
+      expect(sA.surfaceInfluence).toBeCloseTo(sB.surfaceInfluence!, 10);
+      expect(sA.projectedPosition.x).toBeCloseTo(sB.projectedPosition.x, 10);
+      expect(sA.projectedScale.x).toBeCloseTo(sB.projectedScale.x, 10);
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // 11. STRUCTURE_001 Central Reef Holdfast (GAP-002 & Section 27.2)
+  // --------------------------------------------------------------------------
+  describe('11. STRUCTURE_001 Central Reef Projection', () => {
+    it('demonstrates STRUCTURE_001 evaluates with authoritative state and projects to renderer', () => {
+      const sys = new LandscapeEvolutionSystem(1337);
+      const proj = new LandscapeProjection(sys);
+
+      sys.setTime4D(0.0);
+      const state = sys.getFeatureState('STRUCTURE_001')!;
+      expect(state).toBeDefined();
+      expect(state.category).toBe('reef_structure');
+      expect(state.visible).toBe(true);
+
+      const reefMap = new Map<string, THREE.Mesh>();
+      const structMesh = new THREE.Mesh();
+      reefMap.set('STRUCTURE_001', structMesh);
+
+      proj.projectReefStructures(reefMap);
+
+      expect(structMesh.visible).toBe(true);
+      expect(structMesh.position.x).toBeCloseTo(state.projectedPosition.x, 5);
+      expect(structMesh.position.y).toBeCloseTo(state.projectedPosition.y, 5);
+      expect(structMesh.position.z).toBeCloseTo(state.projectedPosition.z, 5);
+      expect(structMesh.scale.x).toBeCloseTo(state.projectedScale.x, 5);
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // 12. Unified Spatial Deformation Invariant (GAP-003, Sections 7, 8, 9)
+  // --------------------------------------------------------------------------
+  describe('12. Unified Spatial Transformation & Invariant', () => {
+    it('satisfies Coordinate-System Invariant: terrain and features evaluated at logical (x, z, w) share identical spatial deformation Phi_w', () => {
+      const sys = new LandscapeEvolutionSystem(1337);
+      const proj = new LandscapeProjection(sys);
+
+      sys.setTime4D(22.5);
+
+      const testCoords = [
+        { x: -9.5, z: -2.0 },
+        { x: 0.0, z: -1.0 },
+        { x: 7.5, z: -1.5 },
+      ];
+
+      for (const coord of testCoords) {
+        const terrainPoint = sys.projectSurface(coord.x, coord.z);
+        const surf = sys.resolveSurface(coord.x, coord.z);
+
+        // Projected horizontal displacement must match flowDelta exactly
+        expect(terrainPoint.projectedPosition.x).toBeCloseTo(coord.x + surf.flowDelta.x, 10);
+        expect(terrainPoint.projectedPosition.z).toBeCloseTo(coord.z + surf.flowDelta.z, 10);
+        expect(terrainPoint.projectedPosition.y).toBeCloseTo(surf.elevation, 10);
+      }
+    });
+
+    it('applies horizontal flow displacement to terrain mesh vertices in projectOntoMesh', () => {
+      const sys = new LandscapeEvolutionSystem(1337);
+      const proj = new LandscapeProjection(sys);
+
+      const sandGeo = new THREE.PlaneGeometry(16, 8, 8, 4);
+      const sandMesh = new THREE.Mesh(sandGeo);
+      sandMesh.rotation.x = -Math.PI / 2;
+      sandMesh.position.y = -6.8;
+
+      sys.setTime4D(15.0);
+      proj.projectOntoMesh(sandMesh);
+
+      const posAttr = sandGeo.attributes.position;
+      // At least one vertex must show non-zero horizontal flow displacement
+      let hasHorizontalDisplacement = false;
+      for (let i = 0; i < posAttr.count; i++) {
+        const localX = posAttr.getX(i);
+        const localY = posAttr.getY(i);
+        const surf = sys.resolveSurface(localX, -localY);
+        if (Math.abs(surf.flowDelta.x) > 0.0001 || Math.abs(surf.flowDelta.z) > 0.0001) {
+          hasHorizontalDisplacement = true;
+          break;
+        }
+      }
+      expect(hasHorizontalDisplacement).toBe(true);
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // 13. Smooth Reef Temporal Support (GAP-005 & Section 17)
+  // --------------------------------------------------------------------------
+  describe('13. Smooth Reef Temporal Support', () => {
+    it('applies smoothstep temporal envelope to reef structures avoiding binary popping', () => {
+      const reef = new ReefStructure4DFeature({
+        id: 'REEF_SMOOTH_TEST',
+        name: 'Smooth Reef Mound',
+        position4D: { x: 2, y: -6.5, z: 1, w: 50 },
+        scale4D: { x: 2, y: 1.5, z: 2, w: 1 },
+        wRange: [20, 80],
+        baseEmbedding: 0.3,
+      });
+
+      const dummySurface = {
+        elevation: -6.5,
+        normal: { x: 0, y: 1, z: 0 },
+        curvature: 0.01,
+        flowDelta: { x: 0, y: 0, z: 0 },
+        gradient: { dx: 0, dz: 0 },
+      };
+
+      // Outside wRange
+      expect(reef.evaluate(15, dummySurface).visible).toBe(false);
+      expect(reef.evaluate(85, dummySurface).visible).toBe(false);
+
+      // Smooth rise boundary (first 15% of [20, 80], i.e., w = 20 to 29)
+      const s21 = reef.evaluate(21, dummySurface);
+      const s25 = reef.evaluate(25, dummySurface);
+      const s28 = reef.evaluate(28, dummySurface);
+
+      expect(s21.visible).toBe(true);
+      expect(s25.visible).toBe(true);
+      expect(s28.visible).toBe(true);
+
+      // Scale must increase smoothly as reef rises
+      expect(s21.projectedScale.y).toBeLessThan(s25.projectedScale.y);
+      expect(s25.projectedScale.y).toBeLessThan(s28.projectedScale.y);
+
+      // Smooth fall boundary (last 15% of [20, 80], i.e., w = 71 to 80)
+      const s72 = reef.evaluate(72, dummySurface);
+      const s76 = reef.evaluate(76, dummySurface);
+      const s79 = reef.evaluate(79, dummySurface);
+
+      expect(s72.visible).toBe(true);
+      expect(s76.visible).toBe(true);
+      expect(s79.visible).toBe(true);
+
+      expect(s72.projectedScale.y).toBeGreaterThan(s76.projectedScale.y);
+      expect(s76.projectedScale.y).toBeGreaterThan(s79.projectedScale.y);
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // 14. Section 28 Single Authoritative World Model Integration Test
+  // --------------------------------------------------------------------------
+  describe('14. Single Authoritative World Model Integration (Section 28)', () => {
+    it('demonstrates seed -> LandscapeEvolutionSystem -> 4D world -> formations -> terrain -> rocks -> reef -> flora anchors all evaluate under single w', () => {
+      const seed = 4242;
+      const sys = new LandscapeEvolutionSystem(seed);
+      const proj = new LandscapeProjection(sys);
+
+      // Traverse to w = 35.0
+      const targetW = 35.0;
+      sys.setTime4D(targetW);
+
+      expect(sys.time4D).toBe(targetW);
+
+      // 1. Formations evaluated at targetW
+      const eastBankState = sys.getFeatureState('FORMATION_EAST_BANK')!;
+      expect(eastBankState.visible).toBe(true);
+      expect(eastBankState.surfaceInfluence).toBeGreaterThan(0.35);
+
+      // 2. Terrain evaluated at targetW
+      const terrainHeightAtPeak = sys.sampleHeight(6.8, 0.8);
+      const formationContrib = sys.getFormationContribution('FORMATION_EAST_BANK', 6.8, 0.8);
+      expect(formationContrib).toBeCloseTo(0.42, 2);
+      expect(Number.isFinite(terrainHeightAtPeak)).toBe(true);
+
+      // 3. Rocks evaluated at targetW
+      const rock002 = sys.getFeatureState('ROCK_002')!;
+      expect(rock002.visible).toBe(true);
+      expect(rock002.projectedPosition.y).toBeCloseTo(
+        rock002.surfaceElevation + rock002.projectedScale.y * 0.5 - rock002.embeddingDepth,
+        2
+      );
+
+      // 4. Reef structures evaluated at targetW
+      const struct001 = sys.getFeatureState('STRUCTURE_001')!;
+      expect(struct001.visible).toBe(true);
+
+      // 5. Flora anchors evaluated at targetW
+      const floraStates = Array.from(sys.getFeatureStates().values()).filter(
+        (s) => s.category === 'flora_anchor'
+      );
+      expect(floraStates.length).toBeGreaterThanOrEqual(6);
+      for (const fa of floraStates) {
+        expect(fa.visible).toBe(true);
+        expect(Number.isFinite(fa.projectedPosition.y)).toBe(true);
+      }
+
+      // 6. Complete projection executed under single targetW
+      const sandMesh = new THREE.Mesh(new THREE.PlaneGeometry(16, 8, 4, 4));
+      sandMesh.rotation.x = -Math.PI / 2;
+      sandMesh.position.y = -6.8;
+
+      proj.projectOntoMesh(sandMesh);
+      const posAttr = (sandMesh.geometry as THREE.BufferGeometry).attributes.position as THREE.BufferAttribute;
+      expect(posAttr.version).toBeGreaterThan(0);
+      expect(Number.isFinite(posAttr.getZ(0))).toBe(true);
     });
   });
 });

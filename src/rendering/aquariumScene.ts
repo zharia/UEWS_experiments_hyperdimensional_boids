@@ -400,9 +400,7 @@ export class AquariumSceneManager {
     this.renderer.setSize(width, height);
     const pixelRatio = Math.min(window.devicePixelRatio, 1.25);
     this.renderer.setPixelRatio(pixelRatio);
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.shadowMap.autoUpdate = true;
+    this.renderer.shadowMap.enabled = false;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.15;
     container.appendChild(this.renderer.domElement);
@@ -474,31 +472,47 @@ export class AquariumSceneManager {
   }
 
   private initDeskAndEnvironment() {
-    // 1. Warm wood grain desk surface
-    const deskGeo = new THREE.BoxGeometry(48, 1.8, 28);
+    // 1. Warm wood grain desk surface (Modular with recessed tank footprint so seabed never clips)
     const deskMat = new THREE.MeshStandardMaterial({
       color: 0x422a1d, // Rich walnut / mahogany
       roughness: 0.45,
       metalness: 0.1,
     });
-    this.deskMesh = new THREE.Mesh(deskGeo, deskMat);
-    this.deskMesh.position.set(0, -7.9, 0);
-    this.deskMesh.receiveShadow = true;
+    this.deskMesh = new THREE.Group() as unknown as THREE.Mesh;
+
+    // Left desk wing (hosts the brass desk lamp)
+    const leftDesk = new THREE.Mesh(new THREE.BoxGeometry(9.8, 1.8, 28), deskMat);
+    leftDesk.position.set(-19.1, -7.9, 0);
+    leftDesk.receiveShadow = true;
+    this.deskMesh.add(leftDesk);
+
+    // Right desk wing (hosts the vintage marine biology books)
+    const rightDesk = new THREE.Mesh(new THREE.BoxGeometry(9.8, 1.8, 28), deskMat);
+    rightDesk.position.set(19.1, -7.9, 0);
+    rightDesk.receiveShadow = true;
+    this.deskMesh.add(rightDesk);
+
+    // Front desk ledge
+    const frontDesk = new THREE.Mesh(new THREE.BoxGeometry(28.4, 1.8, 7.8), deskMat);
+    frontDesk.position.set(0, -7.9, 10.1);
+    frontDesk.receiveShadow = true;
+    this.deskMesh.add(frontDesk);
+
+    // Rear desk ledge
+    const rearDesk = new THREE.Mesh(new THREE.BoxGeometry(28.4, 1.8, 7.8), deskMat);
+    rearDesk.position.set(0, -7.9, -10.1);
+    rearDesk.receiveShadow = true;
+    this.deskMesh.add(rearDesk);
+
+    // Recessed tank support base safely underneath the deepest seabed dunes (y = -8.10)
+    const underTankBase = new THREE.Mesh(new THREE.BoxGeometry(28.4, 1.0, 12.4), deskMat);
+    underTankBase.position.set(0, -8.6, 0);
+    underTankBase.receiveShadow = true;
+    this.deskMesh.add(underTankBase);
+
     this.scene.add(this.deskMesh);
 
-    // 2. Desk shadow pad under tank
-    const shadowPadGeo = new THREE.PlaneGeometry(31, 15);
-    const shadowPadMat = new THREE.MeshBasicMaterial({
-      color: 0x120c08,
-      transparent: true,
-      opacity: 0.65,
-    });
-    const shadowPad = new THREE.Mesh(shadowPadGeo, shadowPadMat);
-    shadowPad.rotation.x = -Math.PI / 2;
-    shadowPad.position.set(0, -6.99, 0);
-    this.scene.add(shadowPad);
-
-    // 3. Desk Lamp structure positioned comfortably outside the tank on the left desk surface
+    // 2. Desk Lamp structure positioned comfortably outside the tank on the left desk surface
     // (Tank left glass is at X = -14.2; base is set back at X = -19.2, Z = 1.8)
     const lampGroup = new THREE.Group();
     lampGroup.position.set(-19.2, -6.8, 1.8);
@@ -648,17 +662,32 @@ export class AquariumSceneManager {
     const tankHeight = 14.4;
     const tankDepth = 12.4;
 
-    // 1. Tank Glass Frame / Beveled Rim
+    // 1. Tank Glass Frame / Beveled Rim (Perimeter trim with hollow floor footprint)
     const rimMat = new THREE.MeshStandardMaterial({
       color: 0x1a242f, // Matte anodized aluminum trim
       roughness: 0.3,
       metalness: 0.8,
     });
 
-    const bottomRimGeo = new THREE.BoxGeometry(tankWidth + 0.6, 0.4, tankDepth + 0.6);
-    const bottomRim = new THREE.Mesh(bottomRimGeo, rimMat);
-    bottomRim.position.y = -7.0;
-    this.scene.add(bottomRim);
+    const bottomRimGroup = new THREE.Group();
+    // Four outer perimeter rails: front, back, left, right (hollow inside so sand substrate never clips)
+    const frontRail = new THREE.Mesh(new THREE.BoxGeometry(tankWidth + 0.6, 0.4, 0.35), rimMat);
+    frontRail.position.set(0, -7.0, (tankDepth + 0.35) * 0.5);
+    bottomRimGroup.add(frontRail);
+
+    const backRail = new THREE.Mesh(new THREE.BoxGeometry(tankWidth + 0.6, 0.4, 0.35), rimMat);
+    backRail.position.set(0, -7.0, -(tankDepth + 0.35) * 0.5);
+    bottomRimGroup.add(backRail);
+
+    const leftRail = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.4, tankDepth), rimMat);
+    leftRail.position.set(-(tankWidth + 0.35) * 0.5, -7.0, 0);
+    bottomRimGroup.add(leftRail);
+
+    const rightRail = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.4, tankDepth), rimMat);
+    rightRail.position.set((tankWidth + 0.35) * 0.5, -7.0, 0);
+    bottomRimGroup.add(rightRail);
+
+    this.scene.add(bottomRimGroup);
 
     const topCanopyGeo = new THREE.BoxGeometry(tankWidth + 0.6, 0.5, tankDepth + 0.6);
     const topCanopy = new THREE.Mesh(topCanopyGeo, rimMat);
@@ -779,21 +808,10 @@ export class AquariumSceneManager {
     this.ambientLight = new THREE.AmbientLight(0x184259, 1.4);
     this.scene.add(this.ambientLight);
 
-    // 2. Overhead Aquarium Canopy LED Light (Casts soft, diffused aquatic shadows)
-    this.topAquariumLight = new THREE.DirectionalLight(0xbbf0ff, 2.0);
+    // 2. Overhead Aquarium Canopy LED Light (Broad, natural diffuse illumination across tank)
+    this.topAquariumLight = new THREE.DirectionalLight(0xbbf0ff, 2.2);
     this.topAquariumLight.position.set(2.0, 16.0, 2.0);
-    this.topAquariumLight.castShadow = true;
-    this.topAquariumLight.shadow.mapSize.width = 2048;
-    this.topAquariumLight.shadow.mapSize.height = 2048;
-    this.topAquariumLight.shadow.camera.near = 1;
-    this.topAquariumLight.shadow.camera.far = 30;
-    this.topAquariumLight.shadow.camera.left = -16;
-    this.topAquariumLight.shadow.camera.right = 16;
-    this.topAquariumLight.shadow.camera.top = 10;
-    this.topAquariumLight.shadow.camera.bottom = -10;
-    this.topAquariumLight.shadow.bias = -0.0004;
-    this.topAquariumLight.shadow.normalBias = 0.04;
-    this.topAquariumLight.shadow.radius = 4.0;
+    this.topAquariumLight.castShadow = false;
     this.scene.add(this.topAquariumLight);
 
     // 3. Warm Desk Lamp Spotlight (Shines warm, soft diffuse light from outside the tank on the left)

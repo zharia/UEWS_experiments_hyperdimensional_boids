@@ -177,10 +177,49 @@ export class Landscape4DField {
   /**
    * Computes smooth periodic 4D coordinate distance along w across geological epochs.
    */
-  private getDeltaW(w: number, cw: number): number {
+  public getDeltaW(w: number, cw: number): number {
     const PERIOD_W = 100.0;
     const rawDeltaW = w - cw;
     return ((((rawDeltaW + PERIOD_W * 0.5) % PERIOD_W) + PERIOD_W) % PERIOD_W) - PERIOD_W * 0.5;
+  }
+
+  /**
+   * Retrieves all geological formations participating in M^4.
+   */
+  public getGeologicalFormations(): LocalizedGeologicalFeature4D[] {
+    return [...this.geologicalFormations];
+  }
+
+  /**
+   * Retrieves a geological formation by its stable ID or canonical alias.
+   */
+  public getGeologicalFormation(id: string): LocalizedGeologicalFeature4D | undefined {
+    const canonicalMap: Record<string, string> = {
+      FORMATION_WEST_SHELF: 'WEST_SHELF_DUNE',
+      FORMATION_EAST_BANK: 'EAST_SAND_BANK',
+      FORMATION_CENTRAL_TRENCH: 'CENTRAL_TRENCH',
+      FORMATION_SEABED_PLATEAU: 'SEABED_PLATEAU',
+    };
+    const targetId = canonicalMap[id] ?? id;
+    return this.geologicalFormations.find(f => f.id === targetId || f.id === id);
+  }
+
+  /**
+   * Evaluates the isolated height contribution of a specific geological formation at (x, z, w).
+   */
+  public evaluateFormationContribution(id: string, x: number, z: number, w: number): number {
+    const gf = this.getGeologicalFormation(id);
+    if (!gf) return 0;
+
+    const dx = (x - gf.cx) / gf.radiusX;
+    const dz = (z - gf.cz) / gf.radiusZ;
+    const dw = this.getDeltaW(w, gf.cw) / gf.radiusW;
+    const distSq4D = dx * dx + dz * dz + dw * dw;
+
+    if (distSq4D < 1.0) {
+      return gf.peakHeight * Math.pow(1.0 - distSq4D, 3);
+    }
+    return 0;
   }
 
   /**

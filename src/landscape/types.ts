@@ -14,6 +14,7 @@ export type LandscapeFeatureCategory =
 
 export type TopologyRelationType =
   | 'supported_by'
+  | 'supports'
   | 'adjacent_to'
   | 'attached_to'
   | 'rooted_on';
@@ -53,6 +54,16 @@ export interface LandscapeFeatureState {
   sliceProgress: number;
   surfaceElevation: number;
   embeddingDepth: number;
+  bounds?: {
+    minX: number;
+    maxX: number;
+    minY: number;
+    maxY: number;
+    minZ: number;
+    maxZ: number;
+  };
+  surfaceInfluence?: number;
+  curvatureInfluence?: number;
 }
 
 export interface SurfaceResolution {

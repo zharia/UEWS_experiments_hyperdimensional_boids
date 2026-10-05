@@ -21,6 +21,7 @@ export interface PlantAnchorTarget {
 export class LandscapeProjection {
   public readonly evolutionSystem: LandscapeEvolutionSystem;
   private cachedHeightGrid: Float32Array;
+  private baseVertexPositions: Float32Array | null = null;
   private totalVertices: number = 65 * 33;
   private lastProjectionTime: number = 0;
 
@@ -38,8 +39,11 @@ export class LandscapeProjection {
   }
 
   /**
-   * Projects the authoritative 4D landscape heightfield onto the Three.js sandMesh geometry.
-   * Modifies vertex buffer Z attribute and recomputes normals for accurate caustic shading.
+   * Projects the authoritative 4D landscape state onto the Three.js sandMesh geometry.
+   * Unified Spatial Transformation (GAP-003, Sections 7 & 8):
+   * Applies horizontal flow deformation (dx, dz) and vertical elevation displacement (dy)
+   * to vertex positions, ensuring terrain and features evaluated at logical (x, z, w)
+   * share the identical spatial deformation Phi_w(x, z).
    */
   public projectOntoMesh(mesh: THREE.Mesh): void {
     if (!mesh) return;
@@ -53,23 +57,33 @@ export class LandscapeProjection {
       this.cachedHeightGrid = new Float32Array(vertexCount);
     }
 
+    // Preserve baseline undeformed logical vertex coordinates
+    if (!this.baseVertexPositions || this.baseVertexPositions.length !== vertexCount * 3) {
+      this.baseVertexPositions = new Float32Array(posAttr.array);
+    }
+
     const basePosY = mesh.position.y; // Typically -6.8
 
     for (let i = 0; i < vertexCount; i++) {
-      const localX = posAttr.getX(i);
-      const localY = posAttr.getY(i);
+      const baseLocalX = this.baseVertexPositions[i * 3 + 0];
+      const baseLocalY = this.baseVertexPositions[i * 3 + 1];
 
-      // Mapping from PlaneGeometry local coordinates (rotation.x = -PI/2) to world coordinates:
-      const worldX = localX;
-      const worldZ = -localY;
+      // Mapping from PlaneGeometry local coordinates (rotation.x = -PI/2) to logical world coordinates:
+      const worldX = baseLocalX;
+      const worldZ = -baseLocalY;
 
-      // Sample authoritative 4D landscape elevation
-      const worldH = this.evolutionSystem.sampleHeight(worldX, worldZ);
-      this.cachedHeightGrid[i] = worldH;
+      // Sample authoritative 4D surface resolution including elevation and 3D flow displacement
+      const surf = this.evolutionSystem.resolveSurface(worldX, worldZ);
+      this.cachedHeightGrid[i] = surf.elevation;
 
-      // Local displacement along plane normal (+localZ corresponds to +worldY)
-      const localZ = worldH - basePosY;
-      posAttr.setZ(i, localZ);
+      // Unified spatial deformation Phi_w(x, z):
+      // In local coordinates: local +X -> world +X, local -Y -> world +Z
+      // So localX = baseLocalX + surf.flowDelta.x, localY = baseLocalY - surf.flowDelta.z
+      const localX = baseLocalX + surf.flowDelta.x;
+      const localY = baseLocalY - surf.flowDelta.z;
+      const localZ = surf.elevation - basePosY;
+
+      posAttr.setXYZ(i, localX, localY, localZ);
     }
 
     posAttr.needsUpdate = true;
@@ -78,6 +92,54 @@ export class LandscapeProjection {
     // Record displacement metrics for diagnostics
     this.evolutionSystem.recordDisplacement(this.cachedHeightGrid);
     this.lastProjectionTime = performance.now();
+  }
+
+  /**
+   * Evaluates the unified spatial projection at logical coordinates (x, z, w).
+   * Satisfies Section 9 coordinate-system invariant.
+   */
+  public projectSurface(x: number, z: number, w?: number) {
+    return this.evolutionSystem.projectSurface(x, z, w);
+  }
+
+  /**
+   * Projects an individual feature state at slice w.
+   */
+  public projectFeature(featureId: string, w?: number) {
+    return this.evolutionSystem.projectFeature(featureId, w);
+  }
+
+  /**
+   * Projects authoritative 4D geological formation states (GAP-001, Sections 4 & 5).
+   * In addition to terrain field integration, allows optional renderer manifestation.
+   */
+  public projectFormations(
+    formationMap?: Map<string, THREE.Object3D> | Record<string, THREE.Object3D>
+  ): void {
+    if (!formationMap) return;
+
+    const entries =
+      formationMap instanceof Map ? formationMap.entries() : Object.entries(formationMap);
+
+    for (const [id, obj] of entries) {
+      if (!obj) continue;
+      const state = this.evolutionSystem.getFeatureState(id);
+      if (!state) continue;
+
+      obj.visible = state.visible;
+      if (state.visible) {
+        obj.position.set(
+          state.projectedPosition.x,
+          state.projectedPosition.y,
+          state.projectedPosition.z
+        );
+        obj.scale.set(
+          state.projectedScale.x,
+          state.projectedScale.y,
+          state.projectedScale.z
+        );
+      }
+    }
   }
 
   /**

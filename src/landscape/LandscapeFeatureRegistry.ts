@@ -289,7 +289,7 @@ export class LandscapeFeatureRegistry {
     }
 
     // =========================================================================
-    // 4. GEOLOGICAL MACRO FORMATIONS
+    // 4. GEOLOGICAL MACRO FORMATIONS (Authoritative Hyper-Ellipsoidal Formations in M^4)
     // =========================================================================
 
     this.register(
@@ -298,7 +298,15 @@ export class LandscapeFeatureRegistry {
         name: 'West Shelf Migratory Dune',
         position4D: { x: -6.5, y: -6.4, z: -1.5, w: 10.0 },
         scale4D: { x: 5.5, y: 0.38, z: 3.8, w: 14.0 },
-        wRange: [-10.0, 30.0],
+        radiusX: 5.5,
+        peakHeight: 0.38,
+        radiusZ: 3.8,
+        radiusW: 14.0,
+        wRange: [-4.0, 24.0],
+        topologyRelations: [
+          { targetId: 'TERRAIN', relation: 'adjacent_to' },
+          { targetId: 'ROCK_001', relation: 'supports' },
+        ],
       })
     );
 
@@ -308,7 +316,15 @@ export class LandscapeFeatureRegistry {
         name: 'East Sand Bank Swell',
         position4D: { x: 6.8, y: -6.35, z: 0.8, w: 35.0 },
         scale4D: { x: 6.0, y: 0.42, z: 4.2, w: 16.0 },
-        wRange: [15.0, 55.0],
+        radiusX: 6.0,
+        peakHeight: 0.42,
+        radiusZ: 4.2,
+        radiusW: 16.0,
+        wRange: [19.0, 51.0],
+        topologyRelations: [
+          { targetId: 'TERRAIN', relation: 'adjacent_to' },
+          { targetId: 'PLATEAU_001', relation: 'adjacent_to' },
+        ],
       })
     );
 
@@ -317,8 +333,16 @@ export class LandscapeFeatureRegistry {
         id: 'FORMATION_CENTRAL_TRENCH',
         name: 'Central Trench Depression',
         position4D: { x: 0.5, y: -6.85, z: -2.2, w: 60.0 },
-        scale4D: { x: 4.8, y: 0.35, z: 3.2, w: 18.0 },
-        wRange: [40.0, 80.0],
+        scale4D: { x: 4.8, y: -0.35, z: 3.2, w: 18.0 },
+        radiusX: 4.8,
+        peakHeight: -0.35,
+        radiusZ: 3.2,
+        radiusW: 18.0,
+        wRange: [42.0, 78.0],
+        topologyRelations: [
+          { targetId: 'TERRAIN', relation: 'adjacent_to' },
+          { targetId: 'FORMATION_SEABED_PLATEAU', relation: 'adjacent_to' },
+        ],
       })
     );
 
@@ -328,7 +352,15 @@ export class LandscapeFeatureRegistry {
         name: 'Seabed Elevated Plateau',
         position4D: { x: -2.0, y: -6.35, z: 2.4, w: 85.0 },
         scale4D: { x: 5.2, y: 0.36, z: 3.6, w: 15.0 },
-        wRange: [65.0, 105.0],
+        radiusX: 5.2,
+        peakHeight: 0.36,
+        radiusZ: 3.6,
+        radiusW: 15.0,
+        wRange: [70.0, 100.0],
+        topologyRelations: [
+          { targetId: 'TERRAIN', relation: 'adjacent_to' },
+          { targetId: 'FORMATION_CENTRAL_TRENCH', relation: 'adjacent_to' },
+        ],
       })
     );
   }

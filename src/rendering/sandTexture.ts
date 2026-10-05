@@ -185,10 +185,10 @@ export function createSandMesh(uniforms?: BenthicCausticUniforms): THREE.Mesh {
     map: sandTexture,
     bumpMap: sandBumpTexture,
     bumpScale: 0.08,
-    roughness: 0.84,
+    roughness: 0.82,
     metalness: 0.02,
-    emissive: 0x142833, // Ambient oceanic backscatter baseline so shadowed sand remains softly illuminated and diffuse
-    emissiveIntensity: 0.42,
+    emissive: 0x221a12, // Soft warm ambient baseline ensuring natural, diffuse shading in substrate folds
+    emissiveIntensity: 0.35,
   });
 
   if (uniforms) {
@@ -265,7 +265,7 @@ export function createSandMesh(uniforms?: BenthicCausticUniforms): THREE.Mesh {
   sandMesh.rotation.x = -Math.PI / 2;
   sandMesh.position.y = -6.8;
   sandMesh.position.z = 0;
-  sandMesh.receiveShadow = true;
+  sandMesh.receiveShadow = false;
 
   return sandMesh;
 }
