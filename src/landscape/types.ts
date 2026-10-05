@@ -165,10 +165,10 @@ export interface LandscapeEvolutionState {
 export interface LandscapeGeometry {
   time4D: number;
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
-  sampleHeight: (x: number, z: number) => number;
-  sampleNormal: (x: number, z: number) => { x: number; y: number; z: number };
-  sampleGradient: (x: number, z: number) => { dx: number; dz: number };
-  sampleHessian: (x: number, z: number) => { dxx: number; dzz: number; dxz: number };
+  sampleHeight: (x: number, z: number, w?: number) => number;
+  sampleNormal: (x: number, z: number, w?: number) => { x: number; y: number; z: number };
+  sampleGradient: (x: number, z: number, w?: number) => { dx: number; dz: number };
+  sampleHessian: (x: number, z: number, w?: number) => { dxx: number; dzz: number; dxz: number };
 }
 
 export interface LandscapeState {

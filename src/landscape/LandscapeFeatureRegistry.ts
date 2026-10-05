@@ -84,12 +84,12 @@ export class LandscapeFeatureRegistry {
    */
   public evaluateAll(
     w: number,
-    resolveSurface: (x: number, z: number) => SurfaceResolution
+    resolveSurface: (x: number, z: number, w?: number) => SurfaceResolution
   ): Map<string, LandscapeFeatureState> {
     const states = new Map<string, LandscapeFeatureState>();
 
     for (const [id, feature] of this.features.entries()) {
-      const surface = resolveSurface(feature.position4D.x, feature.position4D.z);
+      const surface = resolveSurface(feature.position4D.x, feature.position4D.z, w);
       const state = feature.evaluate(w, surface);
       states.set(id, state);
       this.cachedStates.set(id, state);

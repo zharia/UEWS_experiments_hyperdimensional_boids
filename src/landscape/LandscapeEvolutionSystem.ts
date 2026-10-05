@@ -60,7 +60,7 @@ export class LandscapeEvolutionSystem {
     // Initial evaluation of 4D features
     const initialFeatureStates = this.featureRegistry.evaluateAll(
       this.time4D,
-      (x, z) => this.resolveSurface(x, z)
+      (x, z, evalW) => this.resolveSurfaceAt(x, z, evalW !== undefined ? evalW : this.time4D)
     );
     this.topology.validateGeometricTopology(initialFeatureStates);
   }
@@ -214,7 +214,7 @@ export class LandscapeEvolutionSystem {
     // Synchronously evaluate all 4D landscape features against the newly updated surface
     const featureStates = this.featureRegistry.evaluateAll(
       this.time4D,
-      (x, z) => this.resolveSurface(x, z)
+      (x, z, evalW) => this.resolveSurfaceAt(x, z, evalW !== undefined ? evalW : this.time4D)
     );
 
     // Audit geometric topology of visible features
@@ -231,7 +231,7 @@ export class LandscapeEvolutionSystem {
 
     const featureStates = this.featureRegistry.evaluateAll(
       this.time4D,
-      (x, z) => this.resolveSurface(x, z)
+      (x, z, evalW) => this.resolveSurfaceAt(x, z, evalW !== undefined ? evalW : this.time4D)
     );
     this.topology.validateGeometricTopology(featureStates);
   }
@@ -261,8 +261,13 @@ export class LandscapeEvolutionSystem {
    * and full 3D spatial flow displacement (dx, dy, dz) at coordinates (x, z).
    * Satisfies Section 18: full spatial deformation (x, z) -> (x', z').
    */
-  public resolveSurface(x: number, z: number): SurfaceResolution {
-    const baseH = this.field4D.evaluateHeight(x, z, this.time4D);
+  /**
+   * Pure explicit-time surface resolver (Task 007B, Section 4.1):
+   * Performs the complete surface calculation at the supplied coordinate w.
+   * Central Invariant: Evaluated entirely at w with zero reliance on mutable simulation state this.time4D.
+   */
+  public resolveSurfaceAt(x: number, z: number, w: number): SurfaceResolution {
+    const baseH = this.field4D.evaluateHeight(x, z, w);
     let totalDx = 0;
     let totalDy = 0;
     let totalDz = 0;
@@ -276,16 +281,16 @@ export class LandscapeEvolutionSystem {
       else if (mode.type === 'quasi_conformal_pulse') modeWeight = this.quasiConformalStrength;
       else if (mode.type === 'curvature_flow') modeWeight = this.curvatureStrength;
 
-      const delta = mode.evaluate(x, z, this.time4D);
+      const delta = mode.evaluate(x, z, w);
       totalDx += delta.dx * modeWeight;
       totalDy += delta.dy * modeWeight;
       totalDz += delta.dz * modeWeight;
     }
 
     const elevation = baseH + totalDy;
-    const normal = this.geometry.sampleNormal(x, z);
-    const metrics = this.geometry.evaluateMetrics(x, z);
-    const gradient = this.geometry.sampleGradient(x, z);
+    const normal = this.geometry.sampleNormal(x, z, w);
+    const metrics = this.geometry.evaluateMetrics(x, z, w);
+    const gradient = this.geometry.sampleGradient(x, z, w);
 
     return {
       elevation,
@@ -297,9 +302,18 @@ export class LandscapeEvolutionSystem {
   }
 
   /**
-   * Unified Spatial Transformation Phi_w(x, z):
+   * Convenience surface resolver for current simulation time (Task 007B, Section 4.2).
+   * Delegates directly to resolveSurfaceAt(x, z, this.time4D).
+   */
+  public resolveSurface(x: number, z: number): SurfaceResolution {
+    return this.resolveSurfaceAt(x, z, this.time4D);
+  }
+
+  /**
+   * Unified Spatial Transformation Phi_w(x, z) (Task 007B, Section 5):
    * Maps logical coordinates (x, z) at time w to authoritative 3D projected surface point.
    * Coordinate-System Invariant (Sections 7, 9 & 10): Both terrain and features derive from this exact function.
+   * All returned values originate entirely from resolveSurfaceAt(x, z, targetW).
    */
   public projectSurface(
     x: number,
@@ -313,44 +327,7 @@ export class LandscapeEvolutionSystem {
     flowDelta: Vector3D;
   } {
     const targetW = w !== undefined ? w : this.time4D;
-
-    if (w !== undefined && w !== this.time4D) {
-      const baseH = this.field4D.evaluateHeight(x, z, targetW);
-      let totalDx = 0;
-      let totalDy = 0;
-      let totalDz = 0;
-
-      for (let i = 0; i < this.modes.length; i++) {
-        const mode = this.modes[i];
-        if (!mode.active) continue;
-        let modeWeight = 1.0;
-        if (mode.type === 'conformal_wave') modeWeight = this.conformalStrength;
-        else if (mode.type === 'quasi_conformal_pulse') modeWeight = this.quasiConformalStrength;
-        else if (mode.type === 'curvature_flow') modeWeight = this.curvatureStrength;
-        const delta = mode.evaluate(x, z, targetW);
-        totalDx += delta.dx * modeWeight;
-        totalDy += delta.dy * modeWeight;
-        totalDz += delta.dz * modeWeight;
-      }
-
-      const elevation = baseH + totalDy;
-      const normal = this.geometry.sampleNormal(x, z);
-      const metrics = this.geometry.evaluateMetrics(x, z);
-
-      return {
-        projectedPosition: {
-          x: x + totalDx,
-          y: elevation,
-          z: z + totalDz,
-        },
-        normal,
-        elevation,
-        curvature: metrics.meanCurvature,
-        flowDelta: { x: totalDx, y: totalDy, z: totalDz },
-      };
-    }
-
-    const surf = this.resolveSurface(x, z);
+    const surf = this.resolveSurfaceAt(x, z, targetW);
     return {
       projectedPosition: {
         x: x + surf.flowDelta.x,
@@ -365,7 +342,8 @@ export class LandscapeEvolutionSystem {
   }
 
   /**
-   * Projects a feature at time w using the unified landscape transformation.
+   * Projects a feature at time w using the unified landscape transformation (Task 007B, Section 6).
+   * Invariant: Both feature evaluation and surface resolution are executed at the exact same w.
    */
   public projectFeature(
     featureOrId: string | ILandscapeFeature,
@@ -378,23 +356,26 @@ export class LandscapeEvolutionSystem {
     if (!feature) return undefined;
 
     const targetW = w !== undefined ? w : this.time4D;
-    const surf = this.resolveSurface(feature.position4D.x, feature.position4D.z);
+    const surf = this.resolveSurfaceAt(feature.position4D.x, feature.position4D.z, targetW);
     return feature.evaluate(targetW, surf);
   }
 
   /**
    * Evaluates the isolated height contribution of a geological formation.
    */
-  public getFormationContribution(formationId: string, x: number, z: number): number {
-    return this.field4D.evaluateFormationContribution(formationId, x, z, this.time4D);
+  public getFormationContribution(formationId: string, x: number, z: number, w?: number): number {
+    const targetW = w !== undefined ? w : this.time4D;
+    return this.field4D.evaluateFormationContribution(formationId, x, z, targetW);
   }
 
   /**
-   * Samples the authoritative combined landscape height at (x, z):
+   * Samples the authoritative combined landscape height at (x, z, w?):
    * H_total(x, z, w) = H_4D + V_conf.y + V_qc.y + V_curv.y + V_modal.y
    */
-  public sampleHeight(x: number, z: number): number {
-    return this.resolveSurface(x, z).elevation;
+  public sampleHeight(x: number, z: number, w?: number): number {
+    return w !== undefined
+      ? this.resolveSurfaceAt(x, z, w).elevation
+      : this.resolveSurface(x, z).elevation;
   }
 
   /**
@@ -419,11 +400,12 @@ export class LandscapeEvolutionSystem {
   }
 
   /**
-   * Evaluates the local quasi-conformal Beltrami distortion at (x, z).
+   * Evaluates the local quasi-conformal Beltrami distortion at (x, z, w?).
    * Verifies bounded distortion: D <= D_max.
    */
-  public sampleDistortionAt(x: number, z: number): DistortionSample {
-    const rawVal = Math.sin(0.35 * x + 0.25 * z - this.time4D * 0.07 * 1.618 + 3.14);
+  public sampleDistortionAt(x: number, z: number, w?: number): DistortionSample {
+    const targetW = w !== undefined ? w : this.time4D;
+    const rawVal = Math.sin(0.35 * x + 0.25 * z - targetW * 0.07 * 1.618 + 3.14);
     const D = Math.min(this.maxAllowedDistortion, Math.abs(this.maxAllowedDistortion * Math.tanh(rawVal)));
 
     const K = (1.0 + D) / Math.max(0.0001, 1.0 - D);
@@ -435,17 +417,18 @@ export class LandscapeEvolutionSystem {
   }
 
   /**
-   * Evaluates Cauchy-Riemann adherence for the conformal component.
+   * Evaluates Cauchy-Riemann adherence for the conformal component at (x, z, w?).
    */
-  public evaluateConformalDeviation(x: number, z: number): number {
+  public evaluateConformalDeviation(x: number, z: number, w?: number): number {
+    const targetW = w !== undefined ? w : this.time4D;
     const k = 0.12;
     const omega = 0.16;
     const eps = 0.001;
 
     const evalU = (px: number, pz: number) =>
-      Math.cos(k * px - omega * this.time4D) * Math.cosh(k * pz);
+      Math.cos(k * px - omega * targetW) * Math.cosh(k * pz);
     const evalV = (px: number, pz: number) =>
-      -Math.sin(k * px - omega * this.time4D) * Math.sinh(k * pz);
+      -Math.sin(k * px - omega * targetW) * Math.sinh(k * pz);
 
     const u_x = (evalU(x + eps, z) - evalU(x - eps, z)) / (2 * eps);
     const u_z = (evalU(x, z + eps) - evalU(x, z - eps)) / (2 * eps);

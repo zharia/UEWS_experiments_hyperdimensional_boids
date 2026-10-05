@@ -127,7 +127,7 @@ export class Landscape4DField {
   private initializeFormations(): void {
     // Formation 1: West shelf dune crest (emerges around w=0 to w=20)
     this.geologicalFormations.push({
-      id: 'WEST_SHELF_DUNE',
+      id: 'FORMATION_WEST_SHELF',
       cx: -6.5,
       cz: -1.5,
       cw: 10.0,
@@ -139,7 +139,7 @@ export class Landscape4DField {
 
     // Formation 2: East sand bank (peaks around w=25 to w=50)
     this.geologicalFormations.push({
-      id: 'EAST_SAND_BANK',
+      id: 'FORMATION_EAST_BANK',
       cx: 6.8,
       cz: 0.8,
       cw: 35.0,
@@ -151,7 +151,7 @@ export class Landscape4DField {
 
     // Formation 3: Central Trench depression (recedes and deepens)
     this.geologicalFormations.push({
-      id: 'CENTRAL_TRENCH',
+      id: 'FORMATION_CENTRAL_TRENCH',
       cx: 0.5,
       cz: -2.2,
       cw: 60.0,
@@ -163,7 +163,7 @@ export class Landscape4DField {
 
     // Formation 4: Seafloor plateau (later epoch)
     this.geologicalFormations.push({
-      id: 'SEABED_PLATEAU',
+      id: 'FORMATION_SEABED_PLATEAU',
       cx: -2.0,
       cz: 2.4,
       cw: 85.0,
@@ -191,16 +191,18 @@ export class Landscape4DField {
   }
 
   /**
-   * Retrieves a geological formation by its stable ID or canonical alias.
+   * Retrieves a geological formation by its canonical ID or legacy alias.
+   * Canonical IDs (Task 007B): FORMATION_WEST_SHELF, FORMATION_EAST_BANK,
+   * FORMATION_CENTRAL_TRENCH, FORMATION_SEABED_PLATEAU.
    */
   public getGeologicalFormation(id: string): LocalizedGeologicalFeature4D | undefined {
-    const canonicalMap: Record<string, string> = {
-      FORMATION_WEST_SHELF: 'WEST_SHELF_DUNE',
-      FORMATION_EAST_BANK: 'EAST_SAND_BANK',
-      FORMATION_CENTRAL_TRENCH: 'CENTRAL_TRENCH',
-      FORMATION_SEABED_PLATEAU: 'SEABED_PLATEAU',
+    const legacyToCanonicalMap: Record<string, string> = {
+      WEST_SHELF_DUNE: 'FORMATION_WEST_SHELF',
+      EAST_SAND_BANK: 'FORMATION_EAST_BANK',
+      CENTRAL_TRENCH: 'FORMATION_CENTRAL_TRENCH',
+      SEABED_PLATEAU: 'FORMATION_SEABED_PLATEAU',
     };
-    const targetId = canonicalMap[id] ?? id;
+    const targetId = legacyToCanonicalMap[id] ?? id;
     return this.geologicalFormations.find(f => f.id === targetId || f.id === id);
   }
 

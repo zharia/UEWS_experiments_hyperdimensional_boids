@@ -276,10 +276,18 @@ export class LandscapeProjection {
   }
 
   /**
-   * Fast spatial query for world seabed elevation at (x, z).
+   * Pure explicit-time surface resolver (Task 007B):
+   * Resolves authoritative surface state at explicit fourth-dimensional coordinate w.
+   */
+  public resolveSurfaceAt(x: number, z: number, w: number): SurfaceResolution {
+    return this.evolutionSystem.resolveSurfaceAt(x, z, w);
+  }
+
+  /**
+   * Fast spatial query for world seabed elevation at (x, z, w?).
    * Used by microfauna, crabs, and benthic feeders.
    */
-  public getHeightAt(x: number, z: number): number {
-    return this.evolutionSystem.sampleHeight(x, z);
+  public getHeightAt(x: number, z: number, w?: number): number {
+    return this.evolutionSystem.sampleHeight(x, z, w);
   }
 }

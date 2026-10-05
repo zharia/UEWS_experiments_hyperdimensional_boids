@@ -37,20 +37,20 @@ export class LandscapeGeometryEvaluator implements ILandscapeGeometry {
     this.time4D = w;
   }
 
-  public sampleHeight = (x: number, z: number): number => {
-    return this.field.evaluateHeight(x, z, this.time4D);
+  public sampleHeight = (x: number, z: number, w?: number): number => {
+    return this.field.evaluateHeight(x, z, w !== undefined ? w : this.time4D);
   };
 
-  public sampleGradient = (x: number, z: number): { dx: number; dz: number } => {
-    return this.field.evaluateGradient(x, z, this.time4D);
+  public sampleGradient = (x: number, z: number, w?: number): { dx: number; dz: number } => {
+    return this.field.evaluateGradient(x, z, w !== undefined ? w : this.time4D);
   };
 
-  public sampleHessian = (x: number, z: number): { dxx: number; dzz: number; dxz: number } => {
-    return this.field.evaluateHessian(x, z, this.time4D);
+  public sampleHessian = (x: number, z: number, w?: number): { dxx: number; dzz: number; dxz: number } => {
+    return this.field.evaluateHessian(x, z, w !== undefined ? w : this.time4D);
   };
 
-  public sampleNormal = (x: number, z: number): { x: number; y: number; z: number } => {
-    const grad = this.sampleGradient(x, z);
+  public sampleNormal = (x: number, z: number, w?: number): { x: number; y: number; z: number } => {
+    const grad = this.sampleGradient(x, z, w);
     const len = Math.sqrt(grad.dx * grad.dx + 1.0 + grad.dz * grad.dz) || 1.0;
     return {
       x: -grad.dx / len,
@@ -63,10 +63,10 @@ export class LandscapeGeometryEvaluator implements ILandscapeGeometry {
    * Computes the complete surface metrics including 1st and 2nd fundamental forms,
    * Gaussian curvature, mean curvature, and differential geometric classification.
    */
-  public evaluateMetrics(x: number, z: number): SurfaceMetrics {
-    const height = this.sampleHeight(x, z);
-    const grad = this.sampleGradient(x, z);
-    const hess = this.sampleHessian(x, z);
+  public evaluateMetrics(x: number, z: number, w?: number): SurfaceMetrics {
+    const height = this.sampleHeight(x, z, w);
+    const grad = this.sampleGradient(x, z, w);
+    const hess = this.sampleHessian(x, z, w);
 
     // Normal vector
     const denom = 1.0 + grad.dx * grad.dx + grad.dz * grad.dz;
